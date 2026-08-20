@@ -1,6 +1,7 @@
 package io.finstream.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -23,8 +24,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -41,66 +42,70 @@ class MarketEventPipelineTest {
     }
 
     @Test
-    void blockingRepositoryRunsOffTheCallingThread() throws Exception {
+    void blockingRepositoryRunsOffTheCallingThread() {
         FinancialEventRepository repository = mock(FinancialEventRepository.class);
-        CountDownLatch saveEntered = new CountDownLatch(1);
-        CountDownLatch allowSave = new CountDownLatch(1);
-        CountDownLatch saveFinished = new CountDownLatch(1);
+        CompletableFuture<Void> saveEntered = new CompletableFuture<>();
+        CompletableFuture<Void> allowSave = new CompletableFuture<>();
+        CompletableFuture<Void> saveFinished = new CompletableFuture<>();
         AtomicReference<String> saveThread = new AtomicReference<>();
         FinancialEvent financialEvent = financialEvent();
         when(repository.save(any())).thenAnswer(invocation -> {
             saveThread.set(Thread.currentThread().getName());
-            saveEntered.countDown();
-            allowSave.await(2, TimeUnit.SECONDS);
-            saveFinished.countDown();
-            return invocation.getArgument(0);
+            saveEntered.complete(null);
+            try {
+                allowSave.join();
+                return invocation.getArgument(0);
+            } finally {
+                saveFinished.complete(null);
+            }
         });
         MarketEventPipeline pipeline = pipeline(repository, financialEvent);
 
         pipeline.process(marketEvent());
 
-        assertThat(saveEntered.await(2, TimeUnit.SECONDS)).isTrue();
+        await().until(saveEntered::isDone);
         assertThat(saveThread.get()).startsWith("test-persistence");
-        allowSave.countDown();
-        assertThat(saveFinished.await(2, TimeUnit.SECONDS)).isTrue();
+        allowSave.complete(null);
+        await().until(saveFinished::isDone);
+        verify(repository).save(financialEvent);
     }
 
     @Test
-    void persistenceFailureReleasesReservationSoNextEventCanRetry() throws Exception {
+    void persistenceFailureReleasesReservationSoNextEventCanRetry() {
         FinancialEventRepository repository = mock(FinancialEventRepository.class);
-        CountDownLatch secondSave = new CountDownLatch(1);
-        when(repository.save(any()))
-                .thenThrow(new IllegalStateException("database unavailable"))
-                .thenAnswer(invocation -> {
-                    secondSave.countDown();
-                    return invocation.getArgument(0);
-                });
-        MarketEventPipeline pipeline = pipeline(repository, financialEvent());
-
-        pipeline.process(marketEvent());
-        awaitRepositoryCalls(repository);
-        pipeline.process(marketEvent());
-
-        assertThat(secondSave.await(2, TimeUnit.SECONDS)).isTrue();
-        verify(repository, times(2)).save(any());
-    }
-
-    private void awaitRepositoryCalls(FinancialEventRepository repository)
-            throws InterruptedException {
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
-        while (System.nanoTime() < deadline) {
-            try {
-                verify(repository).save(any());
-                return;
-            } catch (AssertionError ignored) {
-                Thread.sleep(10);
+        AtomicInteger attempts = new AtomicInteger();
+        CompletableFuture<FinancialEvent> successfulSave = new CompletableFuture<>();
+        when(repository.save(any())).thenAnswer(invocation -> {
+            if (attempts.incrementAndGet() == 1) {
+                throw new IllegalStateException("database unavailable");
             }
-        }
-        verify(repository).save(any());
+            FinancialEvent saved = invocation.getArgument(0);
+            successfulSave.complete(saved);
+            return saved;
+        });
+        FinancialEvent financialEvent = financialEvent();
+        // An immediate scheduler makes process() return only after doOnError has released the
+        // reservation. Production continues to use boundedElastic; only this test is synchronous.
+        MarketEventPipeline pipeline = pipeline(repository, financialEvent, Schedulers.immediate());
+
+        pipeline.process(marketEvent());
+        verify(repository).save(financialEvent);
+        pipeline.process(marketEvent());
+
+        await().until(successfulSave::isDone);
+        assertThat(successfulSave.join()).isSameAs(financialEvent);
+        verify(repository, times(2)).save(any());
     }
 
     private MarketEventPipeline pipeline(
             FinancialEventRepository repository, FinancialEvent financialEvent) {
+        return pipeline(repository, financialEvent, scheduler);
+    }
+
+    private MarketEventPipeline pipeline(
+            FinancialEventRepository repository,
+            FinancialEvent financialEvent,
+            Scheduler persistenceScheduler) {
         MarketDataConnector connector = Flux::empty;
         MarketStateStore states = ignored -> mock(MarketState.class);
         AnomalyRule rule = new AnomalyRule() {
@@ -120,7 +125,7 @@ class MarketEventPipelineTest {
                 List.of(rule),
                 new EventCooldown(properties()),
                 repository,
-                scheduler);
+                persistenceScheduler);
     }
 
     private FinStreamProperties properties() {
