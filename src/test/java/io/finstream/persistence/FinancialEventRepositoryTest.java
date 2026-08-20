@@ -1,0 +1,38 @@
+package io.finstream.persistence;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import io.finstream.domain.FinancialEvent;
+import java.time.Instant;
+import java.util.Map;
+import java.util.UUID;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+
+@DataJpaTest
+class FinancialEventRepositoryTest {
+    @Autowired FinancialEventRepository repository;
+
+    @Test
+    void persistsJsonMetrics() {
+        UUID id = UUID.randomUUID();
+        repository.saveAndFlush(new FinancialEvent(
+                id,
+                "BINANCE",
+                "BTCUSDT",
+                "RAPID_DROP",
+                Instant.EPOCH,
+                Instant.EPOCH,
+                "HIGH",
+                2.1,
+                "drop",
+                Map.of("return5m", -5.8),
+                Map.of("price", 100)));
+
+        FinancialEvent saved = repository.findById(id).orElseThrow();
+
+        assertThat(saved.getMetrics()).containsEntry("return5m", -5.8);
+        assertThat(saved.getEventType()).isEqualTo("RAPID_DROP");
+    }
+}

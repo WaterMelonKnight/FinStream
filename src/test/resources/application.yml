@@ -1,0 +1,9 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:finstream;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE
+    username: sa
+    password:
+  flyway.enabled: false
+  jpa:
+    hibernate.ddl-auto: create-drop
+finstream.market.binance.enabled: false
