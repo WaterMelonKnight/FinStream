@@ -7,12 +7,14 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Autowired;
 
 @Component
 public class BinanceTradeNormalizer {
     private final ObjectMapper mapper;
     private final Clock clock;
 
+    @Autowired
     public BinanceTradeNormalizer(ObjectMapper mapper) {
         this(mapper, Clock.systemUTC());
     }

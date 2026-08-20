@@ -1,4 +1,12 @@
 spring:
+  ai:
+    mcp:
+      server:
+        name: finstream
+        version: 0.2.0
+        protocol: STREAMABLE
+        capabilities:
+          tool: true
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/finstream}
     username: ${DB_USER:finstream}

@@ -9,6 +9,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Autowired;
 
 @Component
 public class EventCooldown {
@@ -16,6 +17,7 @@ public class EventCooldown {
     private final Clock clock;
     private final Map<String, Entry> entries = new ConcurrentHashMap<>();
 
+    @Autowired
     public EventCooldown(FinStreamProperties properties) {
         this(properties.anomaly().cooldown(), Clock.systemUTC());
     }

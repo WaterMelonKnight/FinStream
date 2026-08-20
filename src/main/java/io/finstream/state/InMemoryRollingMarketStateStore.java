@@ -19,6 +19,7 @@ public class InMemoryRollingMarketStateStore implements MarketStateStore {
     private static final Duration CURRENT_VOLUME_WINDOW = Duration.ofMinutes(1);
 
     private final Map<String, Deque<MarketEvent>> windows = new ConcurrentHashMap<>();
+    private final Map<String, MarketState> latest = new ConcurrentHashMap<>();
 
     @Override
     public MarketState update(MarketEvent event) {
@@ -30,8 +31,15 @@ public class InMemoryRollingMarketStateStore implements MarketStateStore {
             while (!ticks.isEmpty() && ticks.peekFirst().eventTime().isBefore(cutoff)) {
                 ticks.removeFirst();
             }
-            return snapshot(event, ticks);
+            MarketState state = snapshot(event, ticks);
+            latest.put(event.symbol(), state);
+            return state;
         }
+    }
+
+    @Override
+    public java.util.Optional<MarketState> get(String symbol) {
+        return java.util.Optional.ofNullable(latest.get(symbol));
     }
 
     private MarketState snapshot(MarketEvent current, Deque<MarketEvent> ticks) {

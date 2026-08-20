@@ -2,22 +2,14 @@
 
 **FinStream is an open-source real-time financial event and context engine for AI agents.** It senses unusual market behavior and records it as structured `FinancialEvent` data. FinStream is **not a trading bot**, does **not execute trades**, and does **not provide investment advice**.
 
-```mermaid
-flowchart LR
-  B[Binance public WebSocket] --> C[MarketDataConnector]
-  C --> M[Canonical MarketEvent]
-  M --> S[Rolling Market State]
-  S --> R[Anomaly Rules]
-  R --> F[FinancialEvent]
-  F --> P[(PostgreSQL)]
-```
+## V0.2 capabilities
 
-## V0.1 capabilities
+- Streams Binance public aggregate trades, maintains bounded 30-minute in-memory state, and detects rapid price moves and abnormal volume.
+- Persists only anomaly events to PostgreSQL JSONB while keeping the V0.1 real-time pipeline unchanged.
+- Exposes stable, read-only REST response contracts and four MCP tools through one application query layer.
+- Moves blocking JPA persistence and queries away from Reactor Netty event-loop threads.
 
-- Streams public aggregate trades for `BTCUSDT`, `ETHUSDT`, and `SOLUSDT`; no API key is required.
-- Normalizes provider JSON immediately, maintains bounded 30-minute in-memory windows, and detects 5-minute rapid drops/pumps plus abnormal volume.
-- Applies configurable per-symbol/per-event cooldown and persists only anomalies (not raw ticks) to PostgreSQL JSONB.
-- Reconnects with exponential backoff, ignores malformed messages, and exposes `/actuator/health`.
+**FinStream MCP provides read-only market context and anomaly event access.** It has no order, account, wallet, or other trading tools.
 
 ## Run locally
 
@@ -28,17 +20,59 @@ docker compose up -d postgres
 mvn spring-boot:run
 ```
 
-The WebSocket is deliberately off by default. Enable real public data with:
+The WebSocket is off by default. Enable public real-time data (no API key required) with:
 
 ```bash
 BINANCE_ENABLED=true mvn spring-boot:run
 ```
 
-RAPID_DROP and RAPID_PUMP use the fixed V0.1 5-minute return; only their percentage thresholds are configurable. Edit `src/main/resources/application.yml` to lower `threshold-percent` or the volume `ratio` for development. Environment variables `DB_URL`, `DB_USER`, and `DB_PASSWORD` configure PostgreSQL. Inspect events with:
+`DB_URL`, `DB_USER`, and `DB_PASSWORD` configure PostgreSQL. After restart, persisted events remain available, but in-memory market state returns 404 until new trades arrive.
+
+## REST API
+
+List limits default to 50, reject values below 1, and are capped at 200. Symbols and event types are normalized to uppercase. `since` is an ISO-8601 instant.
 
 ```bash
-docker compose exec postgres psql -U finstream -d finstream \
-  -c "select event_time,symbol,event_type,severity,anomaly_score,metrics from financial_event order by event_time desc;"
+curl http://localhost:8080/api/v1/market/BTCUSDT/state
+curl "http://localhost:8080/api/v1/events?symbol=BTCUSDT&limit=10"
+curl "http://localhost:8080/api/v1/events?eventType=RAPID_DROP&limit=20"
+curl http://localhost:8080/api/v1/events/00000000-0000-0000-0000-000000000000
+curl "http://localhost:8080/api/v1/events/abnormal?since=2026-08-20T00:00:00Z&minScore=1.5&symbol=BTCUSDT&limit=50"
 ```
 
-Run the network-independent test suite with `mvn test`. See [architecture](docs/architecture.md) and the non-binding [roadmap](docs/roadmap.md).
+The endpoints are:
+
+- `GET /api/v1/market/{symbol}/state`
+- `GET /api/v1/events`
+- `GET /api/v1/events/{eventId}`
+- `GET /api/v1/events/abnormal`
+
+Invalid input and missing resources use stable JSON errors with `code`, `message`, and `timestamp`.
+
+## MCP server
+
+FinStream embeds the official Spring AI `spring-ai-starter-mcp-server-webflux` 1.1.2 and uses remote-friendly **Streamable HTTP** at `http://localhost:8080/mcp`. Starting the application starts REST and MCP together. MCP invokes the application query services directly; it never calls REST.
+
+Available tools:
+
+- `get_market_state(symbol)`
+- `get_recent_events(symbol?, eventType?, limit?)`
+- `get_event_detail(eventId)`
+- `get_abnormal_events(since?, minScore?, symbol?, limit?)`
+
+A representative client configuration (the outer field names can vary by client) is:
+
+```json
+{
+  "mcpServers": {
+    "finstream": {
+      "type": "streamable-http",
+      "url": "http://localhost:8080/mcp"
+    }
+  }
+}
+```
+
+No API key is needed in V0.2. Do not expose this unauthenticated development server publicly.
+
+Run the network-independent tests with `mvn test` or the complete CI check with `mvn --batch-mode verify`. See [architecture](docs/architecture.md) and the non-binding [roadmap](docs/roadmap.md).

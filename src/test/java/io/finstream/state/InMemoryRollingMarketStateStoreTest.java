@@ -40,6 +40,16 @@ class InMemoryRollingMarketStateStoreTest {
         assertThat(state.volumeRatio()).isEqualTo(3);
     }
 
+    @Test
+    void getReturnsLatestSnapshotWithoutExposingWindow() {
+        InMemoryRollingMarketStateStore store = new InMemoryRollingMarketStateStore();
+        Instant time = Instant.parse("2026-08-20T00:00:00Z");
+        var expected = store.update(event(time, "100", "2"));
+
+        assertThat(store.get("BTCUSDT")).contains(expected);
+        assertThat(store.get("ETHUSDT")).isEmpty();
+    }
+
     private MarketEvent event(Instant time, String price, String quantity) {
         return new MarketEvent(
                 "TEST",
