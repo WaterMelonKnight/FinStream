@@ -1,3 +1,27 @@
 package io.finstream.connector.binance;
-import static org.assertj.core.api.Assertions.assertThat; import com.fasterxml.jackson.databind.ObjectMapper; import java.time.*; import org.junit.jupiter.api.Test;
-class BinanceTradeNormalizerTest {@Test void normalizesCombinedTrade() throws Exception {var n=new BinanceTradeNormalizer(new ObjectMapper(),Clock.fixed(Instant.parse("2024-01-01T00:00:01Z"),ZoneOffset.UTC)); var e=n.normalize("{\"stream\":\"btcusdt@aggTrade\",\"data\":{\"s\":\"BTCUSDT\",\"p\":\"42000.50\",\"q\":\"0.25\",\"T\":1704067200000}}"); assertThat(e.source()).isEqualTo("BINANCE"); assertThat(e.symbol()).isEqualTo("BTCUSDT"); assertThat(e.price().toPlainString()).isEqualTo("42000.50"); assertThat(e.receivedAt()).isEqualTo(Instant.parse("2024-01-01T00:00:01Z"));}}
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import org.junit.jupiter.api.Test;
+
+class BinanceTradeNormalizerTest {
+    @Test
+    void normalizesCombinedTrade() throws Exception {
+        BinanceTradeNormalizer normalizer = new BinanceTradeNormalizer(
+                new ObjectMapper(),
+                Clock.fixed(Instant.parse("2024-01-01T00:00:01Z"), ZoneOffset.UTC));
+
+        var event = normalizer.normalize(
+                "{\"stream\":\"btcusdt@aggTrade\",\"data\":{\"s\":\"BTCUSDT\","
+                        + "\"p\":\"42000.50\",\"q\":\"0.25\",\"T\":1704067200000}}");
+
+        assertThat(event.source()).isEqualTo("BINANCE");
+        assertThat(event.symbol()).isEqualTo("BTCUSDT");
+        assertThat(event.price().toPlainString()).isEqualTo("42000.50");
+        assertThat(event.receivedAt()).isEqualTo(Instant.parse("2024-01-01T00:00:01Z"));
+    }
+}

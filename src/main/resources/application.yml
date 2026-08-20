@@ -19,6 +19,6 @@ finstream:
       base-url: wss://stream.binance.com:9443/stream?streams=
   anomaly:
     cooldown: 10m
-    rapid-drop: { enabled: true, window: 5m, threshold-percent: 3.0 }
-    rapid-pump: { enabled: true, window: 5m, threshold-percent: 3.0 }
+    rapid-drop: { enabled: true, threshold-percent: 3.0 }
+    rapid-pump: { enabled: true, threshold-percent: 3.0 }
     abnormal-volume: { enabled: true, ratio: 3.0 }

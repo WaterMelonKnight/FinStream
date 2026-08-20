@@ -8,5 +8,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 @SpringBootApplication
 @EnableConfigurationProperties(FinStreamProperties.class)
 public class FinStreamApplication {
-    public static void main(String[] args) { SpringApplication.run(FinStreamApplication.class, args); }
+    public static void main(String[] args) {
+        SpringApplication.run(FinStreamApplication.class, args);
+    }
 }
