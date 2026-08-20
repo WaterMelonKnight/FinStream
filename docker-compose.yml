@@ -1,0 +1,18 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: finstream
+      POSTGRES_USER: finstream
+      POSTGRES_PASSWORD: finstream
+    ports:
+      - "5432:5432"
+    volumes:
+      - finstream-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U finstream -d finstream"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+volumes:
+  finstream-postgres:

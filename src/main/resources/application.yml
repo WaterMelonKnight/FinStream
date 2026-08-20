@@ -1,0 +1,24 @@
+spring:
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/finstream}
+    username: ${DB_USER:finstream}
+    password: ${DB_PASSWORD:finstream}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+management.endpoints.web.exposure.include: health,info
+
+finstream:
+  market:
+    symbols: [BTCUSDT, ETHUSDT, SOLUSDT]
+    binance:
+      enabled: ${BINANCE_ENABLED:false}
+      base-url: wss://stream.binance.com:9443/stream?streams=
+  anomaly:
+    cooldown: 10m
+    rapid-drop: { enabled: true, window: 5m, threshold-percent: 3.0 }
+    rapid-pump: { enabled: true, window: 5m, threshold-percent: 3.0 }
+    abnormal-volume: { enabled: true, ratio: 3.0 }
