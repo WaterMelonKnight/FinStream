@@ -1,4 +1,4 @@
-# FinStream V0.1 architecture
+# FinStream V0.2 architecture
 
 ## Runtime flow
 
@@ -26,3 +26,22 @@ Cooldown is keyed by `symbol + eventType`, so a condition that remains true cann
 Kafka, Flink, RisingWave, Redis, and ClickHouse would add operational cost without helping validate this small three-symbol loop. The in-process state is intentionally simple: it is lost on restart and is not horizontally coordinated. These are accepted V0.1 trade-offs, not hidden durability guarantees.
 
 Future stream-processing implementations should replace the connector/state infrastructure behind existing boundaries. They must preserve canonical `MarketEvent`, `FinancialEvent`, and upper API semantics, so downstream agents are insulated from the processing technology.
+
+## V0.2 query and adapter boundaries
+
+```text
+Market Feed
+  -> MarketState / FinancialEvent
+  -> Application Query Layer
+  -> REST adapter + MCP adapter
+```
+
+`MarketQueryService` and `FinancialEventQueryService` own normalization, validation, limit handling, repository specifications, not-found semantics, and mapping to stable response records. REST controllers and MCP tools are thin adapters over those same services; neither adapter calls the other and neither exposes the JPA entity. Dynamic JPA Specifications cover optional filters without a repository method for every combination. Results sort by `detectedAt`, then `eventTime`, descending.
+
+WebFlux REST calls wrap service work on Reactor's bounded-elastic scheduler. MCP tool execution also moves its callable to bounded elastic before waiting for the structured tool result. Blocking JPA queries therefore do not execute on a Reactor Netty event-loop thread, while JPA remains the persistence technology.
+
+The store maintains an immutable latest `MarketState` record per symbol alongside each protected rolling deque. `get` is a constant-time concurrent-map lookup: it neither exposes the deque nor rescans 30 minutes of ticks.
+
+### In-memory state lifetime
+
+After an application restart, historical `FinancialEvent` rows remain in PostgreSQL, but `MarketState` is lost. A market-state query returns not found until fresh live trades rebuild that symbol's state. FinStream does not persist `MarketState` in V0.2. RisingWave or Flink-backed state remains a future roadmap decision.
