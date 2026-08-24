@@ -15,6 +15,8 @@
 
 Requirements: Java 21, Maven 3.9+, and Docker Compose.
 
+FinStream defaults to the Debian-based `postgres:16` Docker image for broader deployment compatibility.
+
 ```bash
 docker compose up -d postgres
 mvn spring-boot:run
