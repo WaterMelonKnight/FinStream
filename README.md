@@ -11,6 +11,52 @@
 
 **FinStream MCP provides read-only market context and anomaly event access.** It has no order, account, wallet, or other trading tools.
 
+## Quick Start
+
+Clone the repository and start both PostgreSQL and FinStream. Docker Compose builds the
+application image, so Java and Maven do not need to be installed on the host.
+
+```bash
+docker compose up -d
+```
+
+Check container status and follow the application logs:
+
+```bash
+docker compose ps
+docker compose logs -f finstream
+```
+
+Check application health and call the REST API:
+
+```bash
+curl http://localhost:8080/actuator/health
+curl http://localhost:8080/api/v1/events
+```
+
+The MCP endpoint is available at `http://localhost:8080/mcp`.
+
+Binance real-time WebSocket ingestion is disabled by default. Enable it for a Compose run with:
+
+```bash
+BINANCE_ENABLED=true docker compose up -d
+```
+
+Stop the containers while retaining PostgreSQL data:
+
+```bash
+docker compose down
+```
+
+To stop the containers and completely delete the PostgreSQL data volume, run:
+
+```bash
+docker compose down -v
+```
+
+**Warning:** `docker compose down -v` permanently deletes the PostgreSQL data stored in the
+Compose volume.
+
 ## Run locally
 
 Requirements: Java 21, Maven 3.9+, and Docker Compose.
