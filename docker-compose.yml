@@ -14,5 +14,21 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  finstream:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/finstream
+      DB_USER: finstream
+      DB_PASSWORD: finstream
+      BINANCE_ENABLED: ${BINANCE_ENABLED:-false}
+    ports:
+      - "8080:8080"
+
 volumes:
   finstream-postgres:
