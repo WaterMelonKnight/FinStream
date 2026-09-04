@@ -1,6 +1,7 @@
 package io.finstream.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -9,6 +10,7 @@ import io.finstream.anomaly.AnomalyRule;
 import io.finstream.domain.FinancialEvent;
 import io.finstream.domain.MarketEvent;
 import io.finstream.domain.MarketSignalType;
+import io.finstream.domain.TradePayload;
 import io.finstream.domain.MarketState;
 import io.finstream.state.MarketStateStore;
 import java.math.BigDecimal;
@@ -44,9 +46,24 @@ class TradeMarketSignalProcessorTest {
         verify(volume).evaluate(trade, state);
     }
 
+    @Test
+    void rejectsTradeSignalWithWrongPayload() {
+        TradeMarketSignalProcessor processor =
+                new TradeMarketSignalProcessor(mock(MarketStateStore.class), List.of());
+        MarketEvent malformed = new MarketEvent(
+                "BINANCE", "BTCUSDT", MarketSignalType.TRADE,
+                Instant.EPOCH, Instant.EPOCH,
+                new io.finstream.domain.FundingRatePayload(
+                        BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE, Instant.EPOCH));
+
+        assertThatThrownBy(() -> processor.process(malformed))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("TradePayload");
+    }
+
     private MarketEvent trade() {
         return new MarketEvent(
                 "BINANCE", "BTCUSDT", MarketSignalType.TRADE, Instant.EPOCH, Instant.EPOCH,
-                BigDecimal.TEN, BigDecimal.ONE);
+                new TradePayload(BigDecimal.TEN, BigDecimal.ONE));
     }
 }

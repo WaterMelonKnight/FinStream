@@ -2,6 +2,7 @@ package io.finstream.state;
 
 import io.finstream.domain.MarketEvent;
 import io.finstream.domain.MarketState;
+import io.finstream.domain.TradePayload;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Duration;
@@ -44,36 +45,38 @@ public class InMemoryRollingMarketStateStore implements MarketStateStore {
 
     private MarketState snapshot(MarketEvent current, Deque<MarketEvent> ticks) {
         Instant now = current.eventTime();
-        BigDecimal high = current.price();
-        BigDecimal low = current.price();
+        TradePayload currentTrade = tradePayload(current);
+        BigDecimal high = currentTrade.price();
+        BigDecimal low = currentTrade.price();
         double volume1m = 0;
         double volume5m = 0;
         double baselineVolume = 0;
         boolean baselineReady = false;
         BigDecimal price1m = null;
         BigDecimal price5m = null;
-        BigDecimal price30m = ticks.peekFirst().price();
+        BigDecimal price30m = tradePayload(ticks.peekFirst()).price();
 
         for (MarketEvent tick : ticks) {
+            TradePayload trade = tradePayload(tick);
             Duration age = Duration.between(tick.eventTime(), now);
             if (age.compareTo(PRICE_WINDOW) >= 0) {
                 baselineReady = true;
             }
             if (age.compareTo(PRICE_WINDOW) <= 0) {
                 if (price5m == null) {
-                    price5m = tick.price();
+                    price5m = trade.price();
                 }
-                volume5m += tick.quantity().doubleValue();
-                high = high.max(tick.price());
-                low = low.min(tick.price());
+                volume5m += trade.quantity().doubleValue();
+                high = high.max(trade.price());
+                low = low.min(trade.price());
             }
             if (age.compareTo(CURRENT_VOLUME_WINDOW) <= 0) {
                 if (price1m == null) {
-                    price1m = tick.price();
+                    price1m = trade.price();
                 }
-                volume1m += tick.quantity().doubleValue();
+                volume1m += trade.quantity().doubleValue();
             } else if (age.compareTo(PRICE_WINDOW) <= 0) {
-                baselineVolume += tick.quantity().doubleValue();
+                baselineVolume += trade.quantity().doubleValue();
             }
         }
 
@@ -83,16 +86,23 @@ public class InMemoryRollingMarketStateStore implements MarketStateStore {
         return new MarketState(
                 current.symbol(),
                 now,
-                current.price(),
-                percentageChange(current.price(), price1m),
-                percentageChange(current.price(), price5m),
-                percentageChange(current.price(), price30m),
+                currentTrade.price(),
+                percentageChange(currentTrade.price(), price1m),
+                percentageChange(currentTrade.price(), price5m),
+                percentageChange(currentTrade.price(), price30m),
                 volume1m,
                 volume5m,
                 high,
                 low,
                 volumeRatio,
                 baselineReady);
+    }
+
+    private TradePayload tradePayload(MarketEvent event) {
+        if (event.payload() instanceof TradePayload trade) {
+            return trade;
+        }
+        throw new IllegalArgumentException("MarketStateStore requires a TradePayload");
     }
 
     private double percentageChange(BigDecimal current, BigDecimal old) {

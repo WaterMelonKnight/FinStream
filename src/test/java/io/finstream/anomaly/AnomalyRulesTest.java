@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import io.finstream.config.FinStreamProperties;
 import io.finstream.domain.MarketEvent;
 import io.finstream.domain.MarketSignalType;
+import io.finstream.domain.TradePayload;
 import io.finstream.domain.MarketState;
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -28,8 +29,7 @@ class AnomalyRulesTest {
             MarketSignalType.TRADE,
             Instant.EPOCH,
             Instant.EPOCH,
-            BigDecimal.TEN,
-            BigDecimal.ONE);
+            new TradePayload(BigDecimal.TEN, BigDecimal.ONE));
 
     @Test
     void rapidDropTriggers() {

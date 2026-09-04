@@ -2,6 +2,7 @@ package io.finstream.anomaly;
 
 import io.finstream.domain.FinancialEvent;
 import io.finstream.domain.MarketEvent;
+import io.finstream.domain.TradePayload;
 import java.time.Clock;
 import java.util.Map;
 import java.util.UUID;
@@ -26,6 +27,6 @@ final class RuleEventFactory {
                 score,
                 summary,
                 metrics,
-                Map.of("lastPrice", event.price()));
+                Map.of("lastPrice", ((TradePayload) event.payload()).price()));
     }
 }

@@ -5,6 +5,7 @@
 ## V0.2 capabilities
 
 - Streams Binance public aggregate trades, maintains bounded 30-minute in-memory state, and detects rapid price moves and abnormal volume.
+- Optionally polls Binance's public USDⓈ-M premium-index endpoint for funding rates and keeps the latest snapshot per configured symbol in memory.
 - Persists only anomaly events to PostgreSQL JSONB while keeping the V0.1 real-time pipeline unchanged.
 - Exposes stable, read-only REST response contracts and four MCP tools through one application query layer.
 - Moves blocking JPA persistence and queries away from Reactor Netty event-loop threads.
@@ -42,6 +43,17 @@ Binance real-time WebSocket ingestion is disabled by default. Enable it for a Co
 BINANCE_ENABLED=true docker compose up -d
 ```
 
+Funding-rate ingestion is independently disabled by default. Enable its keyless public REST
+poller (60-second default interval) without changing trade ingestion with:
+
+```bash
+BINANCE_FUNDING_ENABLED=true docker compose up -d
+```
+
+The poller reuses `finstream.market.symbols`. Override its interval, if needed, with
+`BINANCE_FUNDING_POLL_INTERVAL` (for example, `30s`). Funding snapshots are currently
+in-memory only and are not exposed through REST or MCP.
+
 Stop the containers while retaining PostgreSQL data:
 
 ```bash
@@ -68,11 +80,14 @@ docker compose up -d postgres
 mvn spring-boot:run
 ```
 
-The WebSocket is off by default. Enable public real-time data (no API key required) with:
+The trade WebSocket is off by default. Enable public real-time trade data (no API key required) with:
 
 ```bash
 BINANCE_ENABLED=true mvn spring-boot:run
 ```
+
+Likewise, `BINANCE_FUNDING_ENABLED=true mvn spring-boot:run` enables only the public
+funding-rate poller. The two ingestion switches are independent.
 
 `DB_URL`, `DB_USER`, and `DB_PASSWORD` configure PostgreSQL. After restart, persisted events remain available, but in-memory market state returns 404 until new trades arrive.
 

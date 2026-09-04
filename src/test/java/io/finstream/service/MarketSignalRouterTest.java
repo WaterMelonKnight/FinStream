@@ -7,8 +7,10 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import io.finstream.domain.FinancialEvent;
+import io.finstream.domain.FundingRatePayload;
 import io.finstream.domain.MarketEvent;
 import io.finstream.domain.MarketSignalType;
+import io.finstream.domain.TradePayload;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
@@ -33,15 +35,30 @@ class MarketSignalRouterTest {
         when(tradeProcessor.signalType()).thenReturn(MarketSignalType.TRADE);
 
         assertThat(new MarketSignalRouter(List.of(tradeProcessor))
-                        .route(event(MarketSignalType.FUNDING_RATE)))
+                        .route(event(MarketSignalType.OPEN_INTEREST)))
                 .isEmpty();
         verify(tradeProcessor).signalType();
         verifyNoMoreInteractions(tradeProcessor);
     }
 
+    @Test
+    void fundingRateIsSentToFundingRateProcessor() {
+        MarketSignalProcessor fundingProcessor = mock(MarketSignalProcessor.class);
+        MarketEvent funding = new MarketEvent(
+                "BINANCE", "BTCUSDT", MarketSignalType.FUNDING_RATE,
+                Instant.EPOCH, Instant.EPOCH,
+                new FundingRatePayload(BigDecimal.ONE, BigDecimal.TEN,
+                        BigDecimal.TEN, Instant.EPOCH));
+        when(fundingProcessor.signalType()).thenReturn(MarketSignalType.FUNDING_RATE);
+        when(fundingProcessor.process(funding)).thenReturn(List.of());
+
+        assertThat(new MarketSignalRouter(List.of(fundingProcessor)).route(funding)).isEmpty();
+        verify(fundingProcessor).process(funding);
+    }
+
     private MarketEvent event(MarketSignalType signalType) {
         return new MarketEvent(
                 "BINANCE", "BTCUSDT", signalType, Instant.EPOCH, Instant.EPOCH,
-                BigDecimal.TEN, BigDecimal.ONE);
+                new TradePayload(BigDecimal.TEN, BigDecimal.ONE));
     }
 }

@@ -3,20 +3,30 @@
 ## Runtime flow
 
 ```text
-Binance public WebSocket
-  -> MarketDataConnector
-  -> canonical MarketEvent
+MarketDataConnector(s)
+  +-> Binance aggregate TRADE WebSocket
+  +-> Binance FUNDING_RATE REST polling
+  -> canonical MarketEvent with typed payload
   -> Market Signal Router
-  -> TRADE processor
-  -> Rolling Market State / AnomalyRule implementations
-  -> cooldown / deduplication
-  -> FinancialEvent
-  -> PostgreSQL
+      +-> TRADE processor -> Rolling Market State -> AnomalyRule implementations
+      |                    -> cooldown -> FinancialEvent -> PostgreSQL
+      +-> FUNDING_RATE processor -> latest FundingRateState (no anomaly yet)
 ```
 
 The connector boundary prevents Binance's wire DTO/JSON from entering the domain. The pipeline merges the canonical streams from its registered `MarketDataConnector` implementations, so a future signal connector can be added without changing pipeline control flow. Every canonical `MarketEvent` identifies its exchange in `source` (currently `BINANCE`) and its exchange-independent input kind in `signalType`. `MarketSignalType` contains `TRADE`, `FUNDING_RATE`, `OPEN_INTEREST`, and `LIQUIDATION`; these input types are deliberately separate from anomaly output types such as `RAPID_DROP` and `ABNORMAL_VOLUME` in `FinancialEvent.eventType`.
 
-The router dispatches each input only to the processor registered for its signal type. Currently **only the `TRADE` processor is implemented**. It owns the existing price/volume path: `MarketStateStore` provides a replaceable state boundary; its implementation keeps a synchronized, bounded deque per symbol and derives 1-, 5-, and 30-minute measurements. RAPID_DROP and RAPID_PUMP intentionally use the fixed 5-minute return. Independent `AnomalyRule` implementations consume the same snapshot. Only noteworthy `FinancialEvent` objects cross the persistence boundary; raw trades remain transient.
+The router dispatches each input only to the processor registered for its signal type. The
+`TRADE` processor owns the existing price/volume path: `MarketStateStore` provides a replaceable
+state boundary; its implementation keeps a synchronized, bounded deque per symbol and derives
+1-, 5-, and 30-minute measurements. RAPID_DROP and RAPID_PUMP intentionally use the fixed
+5-minute return. Independent `AnomalyRule` implementations consume the same snapshot. Only
+noteworthy `FinancialEvent` objects cross the persistence boundary; raw trades remain transient.
+
+The `FUNDING_RATE` processor validates its typed payload and replaces the symbol's latest
+`FundingRateState`. That snapshot contains source, symbol, funding rate, mark and index prices,
+next funding time, Binance event time, and local receive time. It is deliberately in memory,
+does not run anomaly rules, and returns no `FinancialEvent`. `FUNDING_EXTREME` is not yet
+implemented, and funding state is not exposed through REST or MCP.
 
 ```text
 MarketDataConnector
@@ -27,8 +37,10 @@ Canonical MarketEvent
         v
 Market Signal Router
         |
-        +--> TRADE processor (implemented)
-        +--> FUNDING_RATE processor (future)
+        +--> TRADE processor
+        |      -> MarketState -> anomaly rules -> FinancialEvent
+        +--> FUNDING_RATE processor
+        |      -> FundingRateState -> no anomaly yet
         +--> OPEN_INTEREST processor (future)
         +--> LIQUIDATION processor (future)
         |
@@ -36,13 +48,24 @@ Market Signal Router
 FinancialEvent -> PostgreSQL -> REST / MCP
 ```
 
-The canonical envelope retains `price` and `quantity` because trade is the sole implemented payload. This small trade-specific compromise avoids premature polymorphic serialization. A future signal can introduce only the payload structure it actually needs while reusing the stable source/type/time envelope and processor registration point; no message bus is required for that extension.
+The canonical envelope contains source, symbol, signal type, exchange event time, local receive
+time, and a small sealed `MarketSignalPayload`. Only the payloads actually ingested exist:
+`TradePayload(price, quantity)` and `FundingRatePayload(fundingRate, markPrice, indexPrice,
+nextFundingTime)`. Processors fail fast if their signal receives the wrong payload type. This
+keeps signal-specific values out of nullable envelope fields without introducing serialization
+annotations or speculative payload types.
 
 ABNORMAL_VOLUME compares the current one-minute volume with the per-minute average of the preceding four minutes. It remains in warm-up until the in-memory state has five minutes of history, so a restart cannot immediately produce a volume anomaly from a partial baseline. This simple baseline is intentionally not seasonality-aware.
 
 State calculation stays on the streaming path, while blocking JPA saves are scheduled on Reactor's shared bounded-elastic scheduler. A cooldown key is reserved while a save is in flight and committed only after persistence succeeds; failures release the reservation for a later trade to retry.
 
-Cooldown is keyed by `symbol + eventType`, so a condition that remains true cannot create an event on every trade. Configuration properties bind sources, symbols, thresholds, and cooldown centrally. The Binance adapter reconnects with capped exponential backoff and treats malformed messages as isolated input errors.
+Cooldown is keyed by `symbol + eventType`, so a condition that remains true cannot create an
+event on every trade. Configuration properties bind sources, shared symbols, thresholds, and
+cooldown centrally. The Binance trade adapter reconnects with capped exponential backoff and
+treats malformed messages as isolated input errors. The independent Binance funding adapter
+polls the public USDⓈ-M `/fapi/v1/premiumIndex` endpoint once per configured symbol every 60
+seconds by default. A request or normalization failure is isolated to that poll, so later polls
+continue. Both connectors are disabled independently by default.
 
 ## Deliberate constraints
 
