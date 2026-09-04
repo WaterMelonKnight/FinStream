@@ -8,21 +8,18 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import io.finstream.anomaly.AnomalyRule;
 import io.finstream.anomaly.EventCooldown;
 import io.finstream.config.FinStreamProperties;
 import io.finstream.connector.MarketDataConnector;
 import io.finstream.domain.FinancialEvent;
 import io.finstream.domain.MarketEvent;
-import io.finstream.domain.MarketState;
+import io.finstream.domain.MarketSignalType;
 import io.finstream.persistence.FinancialEventRepository;
-import io.finstream.state.MarketStateStore;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -107,22 +104,20 @@ class MarketEventPipelineTest {
             FinancialEvent financialEvent,
             Scheduler persistenceScheduler) {
         MarketDataConnector connector = Flux::empty;
-        MarketStateStore states = ignored -> mock(MarketState.class);
-        AnomalyRule rule = new AnomalyRule() {
+        MarketSignalProcessor processor = new MarketSignalProcessor() {
             @Override
-            public String eventType() {
-                return "RAPID_DROP";
+            public MarketSignalType signalType() {
+                return MarketSignalType.TRADE;
             }
 
             @Override
-            public Optional<FinancialEvent> evaluate(MarketEvent event, MarketState state) {
-                return Optional.of(financialEvent);
+            public List<FinancialEvent> process(MarketEvent event) {
+                return List.of(financialEvent);
             }
         };
         return new MarketEventPipeline(
-                connector,
-                states,
-                List.of(rule),
+                List.of(connector),
+                new MarketSignalRouter(List.of(processor)),
                 new EventCooldown(properties()),
                 repository,
                 persistenceScheduler);
@@ -139,7 +134,7 @@ class MarketEventPipelineTest {
         return new MarketEvent(
                 "TEST",
                 "BTCUSDT",
-                MarketEvent.EventType.TRADE,
+                MarketSignalType.TRADE,
                 Instant.EPOCH,
                 Instant.EPOCH,
                 BigDecimal.TEN,

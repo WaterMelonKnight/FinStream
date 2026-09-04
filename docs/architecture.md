@@ -6,14 +6,37 @@
 Binance public WebSocket
   -> MarketDataConnector
   -> canonical MarketEvent
-  -> Rolling Market State
-  -> AnomalyRule implementations
+  -> Market Signal Router
+  -> TRADE processor
+  -> Rolling Market State / AnomalyRule implementations
   -> cooldown / deduplication
   -> FinancialEvent
   -> PostgreSQL
 ```
 
-The connector boundary prevents Binance's wire DTO/JSON from entering the domain. `MarketStateStore` provides a replaceable state boundary; its V0.1 implementation keeps a synchronized, bounded deque per symbol and derives 1-, 5-, and 30-minute measurements. RAPID_DROP and RAPID_PUMP intentionally use the fixed 5-minute return in V0.1; configurable windows are deferred. Independent `AnomalyRule` implementations consume the same snapshot. Only noteworthy `FinancialEvent` objects cross the persistence boundary; raw trades remain transient.
+The connector boundary prevents Binance's wire DTO/JSON from entering the domain. The pipeline merges the canonical streams from its registered `MarketDataConnector` implementations, so a future signal connector can be added without changing pipeline control flow. Every canonical `MarketEvent` identifies its exchange in `source` (currently `BINANCE`) and its exchange-independent input kind in `signalType`. `MarketSignalType` contains `TRADE`, `FUNDING_RATE`, `OPEN_INTEREST`, and `LIQUIDATION`; these input types are deliberately separate from anomaly output types such as `RAPID_DROP` and `ABNORMAL_VOLUME` in `FinancialEvent.eventType`.
+
+The router dispatches each input only to the processor registered for its signal type. Currently **only the `TRADE` processor is implemented**. It owns the existing price/volume path: `MarketStateStore` provides a replaceable state boundary; its implementation keeps a synchronized, bounded deque per symbol and derives 1-, 5-, and 30-minute measurements. RAPID_DROP and RAPID_PUMP intentionally use the fixed 5-minute return. Independent `AnomalyRule` implementations consume the same snapshot. Only noteworthy `FinancialEvent` objects cross the persistence boundary; raw trades remain transient.
+
+```text
+MarketDataConnector
+        |
+        v
+Canonical MarketEvent
+        |
+        v
+Market Signal Router
+        |
+        +--> TRADE processor (implemented)
+        +--> FUNDING_RATE processor (future)
+        +--> OPEN_INTEREST processor (future)
+        +--> LIQUIDATION processor (future)
+        |
+        v
+FinancialEvent -> PostgreSQL -> REST / MCP
+```
+
+The canonical envelope retains `price` and `quantity` because trade is the sole implemented payload. This small trade-specific compromise avoids premature polymorphic serialization. A future signal can introduce only the payload structure it actually needs while reusing the stable source/type/time envelope and processor registration point; no message bus is required for that extension.
 
 ABNORMAL_VOLUME compares the current one-minute volume with the per-minute average of the preceding four minutes. It remains in warm-up until the in-memory state has five minutes of history, so a restart cannot immediately produce a volume anomaly from a partial baseline. This simple baseline is intentionally not seasonality-aware.
 
