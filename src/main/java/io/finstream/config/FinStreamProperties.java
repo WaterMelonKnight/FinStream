@@ -20,11 +20,26 @@ public record FinStreamProperties(Market market, Anomaly anomaly) {
         }
     }
 
-    public record Binance(boolean enabled, String baseUrl) {
+    public record Binance(boolean enabled, String baseUrl, FundingRate fundingRate) {
+        public Binance(boolean enabled, String baseUrl) {
+            this(enabled, baseUrl, null);
+        }
+
         public Binance {
             baseUrl = baseUrl == null
                     ? "wss://stream.binance.com:9443/stream?streams="
                     : baseUrl;
+            fundingRate = fundingRate == null ? new FundingRate(false, null, null) : fundingRate;
+        }
+    }
+
+    public record FundingRate(boolean enabled, String baseUrl, Duration pollInterval) {
+        public FundingRate {
+            baseUrl = baseUrl == null ? "https://fapi.binance.com" : baseUrl;
+            pollInterval = pollInterval == null ? Duration.ofSeconds(60) : pollInterval;
+            if (pollInterval.isZero() || pollInterval.isNegative()) {
+                throw new IllegalArgumentException("Funding rate poll interval must be positive");
+            }
         }
     }
 

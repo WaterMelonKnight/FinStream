@@ -27,6 +27,8 @@ services:
       DB_USER: finstream
       DB_PASSWORD: finstream
       BINANCE_ENABLED: ${BINANCE_ENABLED:-false}
+      BINANCE_FUNDING_ENABLED: ${BINANCE_FUNDING_ENABLED:-false}
+      BINANCE_FUNDING_POLL_INTERVAL: ${BINANCE_FUNDING_POLL_INTERVAL:-60s}
     ports:
       - "8080:8080"
 

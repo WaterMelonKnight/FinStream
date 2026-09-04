@@ -14,6 +14,7 @@ import io.finstream.connector.MarketDataConnector;
 import io.finstream.domain.FinancialEvent;
 import io.finstream.domain.MarketEvent;
 import io.finstream.domain.MarketSignalType;
+import io.finstream.domain.TradePayload;
 import io.finstream.persistence.FinancialEventRepository;
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -137,8 +138,7 @@ class MarketEventPipelineTest {
                 MarketSignalType.TRADE,
                 Instant.EPOCH,
                 Instant.EPOCH,
-                BigDecimal.TEN,
-                BigDecimal.ONE);
+                new TradePayload(BigDecimal.TEN, BigDecimal.ONE));
     }
 
     private FinancialEvent financialEvent() {

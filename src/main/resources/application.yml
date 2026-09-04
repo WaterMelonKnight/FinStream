@@ -25,6 +25,10 @@ finstream:
     binance:
       enabled: ${BINANCE_ENABLED:false}
       base-url: wss://stream.binance.com:9443/stream?streams=
+      funding-rate:
+        enabled: ${BINANCE_FUNDING_ENABLED:false}
+        base-url: https://fapi.binance.com
+        poll-interval: ${BINANCE_FUNDING_POLL_INTERVAL:60s}
   anomaly:
     cooldown: 10m
     rapid-drop: { enabled: true, threshold-percent: 3.0 }

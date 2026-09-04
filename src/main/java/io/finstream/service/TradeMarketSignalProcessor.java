@@ -5,6 +5,7 @@ import io.finstream.domain.FinancialEvent;
 import io.finstream.domain.MarketEvent;
 import io.finstream.domain.MarketSignalType;
 import io.finstream.domain.MarketState;
+import io.finstream.domain.TradePayload;
 import io.finstream.state.MarketStateStore;
 import java.util.List;
 import org.springframework.stereotype.Component;
@@ -26,6 +27,9 @@ public class TradeMarketSignalProcessor implements MarketSignalProcessor {
 
     @Override
     public List<FinancialEvent> process(MarketEvent event) {
+        if (event.signalType() != MarketSignalType.TRADE || !(event.payload() instanceof TradePayload)) {
+            throw new IllegalArgumentException("TRADE processor requires a TradePayload");
+        }
         MarketState state = states.update(event);
         return rules.stream()
                 .map(rule -> rule.evaluate(event, state))

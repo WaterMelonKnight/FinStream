@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import io.finstream.domain.MarketEvent;
 import io.finstream.domain.MarketSignalType;
+import io.finstream.domain.TradePayload;
 import java.math.BigDecimal;
 import java.time.Instant;
 import org.junit.jupiter.api.Test;
@@ -58,7 +59,6 @@ class InMemoryRollingMarketStateStoreTest {
                 MarketSignalType.TRADE,
                 time,
                 time,
-                new BigDecimal(price),
-                new BigDecimal(quantity));
+                new TradePayload(new BigDecimal(price), new BigDecimal(quantity)));
     }
 }
