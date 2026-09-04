@@ -3,6 +3,7 @@ package io.finstream.state;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.finstream.domain.MarketEvent;
+import io.finstream.domain.MarketSignalType;
 import java.math.BigDecimal;
 import java.time.Instant;
 import org.junit.jupiter.api.Test;
@@ -54,7 +55,7 @@ class InMemoryRollingMarketStateStoreTest {
         return new MarketEvent(
                 "TEST",
                 "BTCUSDT",
-                MarketEvent.EventType.TRADE,
+                MarketSignalType.TRADE,
                 time,
                 time,
                 new BigDecimal(price),

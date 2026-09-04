@@ -3,6 +3,7 @@ package io.finstream.connector.binance;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.finstream.domain.MarketEvent;
+import io.finstream.domain.MarketSignalType;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
@@ -36,7 +37,7 @@ public class BinanceTradeNormalizer {
         return new MarketEvent(
                 "BINANCE",
                 data.get("s").asText(),
-                MarketEvent.EventType.TRADE,
+                MarketSignalType.TRADE,
                 Instant.ofEpochMilli(data.get("T").asLong()),
                 clock.instant(),
                 new BigDecimal(data.get("p").asText()),

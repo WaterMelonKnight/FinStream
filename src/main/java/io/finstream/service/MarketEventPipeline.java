@@ -1,14 +1,11 @@
 package io.finstream.service;
 
-import io.finstream.anomaly.AnomalyRule;
 import io.finstream.anomaly.EventCooldown;
 import io.finstream.anomaly.EventCooldown.Reservation;
 import io.finstream.connector.MarketDataConnector;
 import io.finstream.domain.FinancialEvent;
 import io.finstream.domain.MarketEvent;
-import io.finstream.domain.MarketState;
 import io.finstream.persistence.FinancialEventRepository;
-import io.finstream.state.MarketStateStore;
 import jakarta.annotation.PostConstruct;
 import java.util.List;
 import org.slf4j.Logger;
@@ -23,33 +20,29 @@ import reactor.core.scheduler.Schedulers;
 public class MarketEventPipeline {
     private static final Logger log = LoggerFactory.getLogger(MarketEventPipeline.class);
 
-    private final MarketDataConnector connector;
-    private final MarketStateStore states;
-    private final List<AnomalyRule> rules;
+    private final List<MarketDataConnector> connectors;
+    private final MarketSignalRouter router;
     private final EventCooldown cooldown;
     private final FinancialEventRepository repository;
     private final Scheduler persistenceScheduler;
 
     @Autowired
     public MarketEventPipeline(
-            MarketDataConnector connector,
-            MarketStateStore states,
-            List<AnomalyRule> rules,
+            List<MarketDataConnector> connectors,
+            MarketSignalRouter router,
             EventCooldown cooldown,
             FinancialEventRepository repository) {
-        this(connector, states, rules, cooldown, repository, Schedulers.boundedElastic());
+        this(connectors, router, cooldown, repository, Schedulers.boundedElastic());
     }
 
     MarketEventPipeline(
-            MarketDataConnector connector,
-            MarketStateStore states,
-            List<AnomalyRule> rules,
+            List<MarketDataConnector> connectors,
+            MarketSignalRouter router,
             EventCooldown cooldown,
             FinancialEventRepository repository,
             Scheduler persistenceScheduler) {
-        this.connector = connector;
-        this.states = states;
-        this.rules = rules;
+        this.connectors = List.copyOf(connectors);
+        this.router = router;
         this.cooldown = cooldown;
         this.repository = repository;
         this.persistenceScheduler = persistenceScheduler;
@@ -57,16 +50,15 @@ public class MarketEventPipeline {
 
     @PostConstruct
     void start() {
-        connector.events().subscribe(
+        reactor.core.publisher.Flux.merge(
+                        connectors.stream().map(MarketDataConnector::events).toList())
+                .subscribe(
                 this::process,
                 error -> log.error("Market pipeline failed", error));
     }
 
     void process(MarketEvent event) {
-        MarketState state = states.update(event);
-        for (AnomalyRule rule : rules) {
-            rule.evaluate(event, state).ifPresent(this::persistIfNotCoolingDown);
-        }
+        router.route(event).forEach(this::persistIfNotCoolingDown);
     }
 
     private void persistIfNotCoolingDown(FinancialEvent event) {
