@@ -33,6 +33,12 @@ public class FinStreamMcpTools {
         return execute(() -> markets.getFundingRateState(symbol));
     }
 
+    @Tool(name = "get_open_interest_state", description = "Get the latest in-memory Open Interest snapshot for a symbol. Read-only current state, not history; the value preserves Binance Open Interest numeric semantics.")
+    public McpToolResult getOpenInterestState(
+            @ToolParam(description = "Market symbol, for example BTCUSDT") String symbol) {
+        return execute(() -> markets.getOpenInterestState(symbol));
+    }
+
     @Tool(name = "get_recent_events", description = "Get recent anomaly events, newest first. All filters are optional. Read-only.")
     public McpToolResult getRecentEvents(
             @ToolParam(description = "Optional market symbol", required = false) String symbol,

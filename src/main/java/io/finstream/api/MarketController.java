@@ -3,6 +3,7 @@ package io.finstream.api;
 import io.finstream.query.FundingRateStateResponse;
 import io.finstream.query.MarketQueryService;
 import io.finstream.query.MarketStateResponse;
+import io.finstream.query.OpenInterestStateResponse;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -26,6 +27,12 @@ public class MarketController {
     @GetMapping("/{symbol}/funding-rate")
     public Mono<FundingRateStateResponse> fundingRate(@PathVariable String symbol) {
         return Mono.fromCallable(() -> service.getFundingRateState(symbol))
+                .subscribeOn(Schedulers.boundedElastic());
+    }
+
+    @GetMapping("/{symbol}/open-interest")
+    public Mono<OpenInterestStateResponse> openInterest(@PathVariable String symbol) {
+        return Mono.fromCallable(() -> service.getOpenInterestState(symbol))
                 .subscribeOn(Schedulers.boundedElastic());
     }
 }

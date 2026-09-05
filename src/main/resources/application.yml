@@ -29,6 +29,10 @@ finstream:
         enabled: ${BINANCE_FUNDING_ENABLED:false}
         base-url: https://fapi.binance.com
         poll-interval: ${BINANCE_FUNDING_POLL_INTERVAL:60s}
+      open-interest:
+        enabled: ${BINANCE_OPEN_INTEREST_ENABLED:false}
+        base-url: https://fapi.binance.com
+        poll-interval: ${BINANCE_OPEN_INTEREST_POLL_INTERVAL:30s}
   anomaly:
     cooldown: 10m
     rapid-drop: { enabled: true, threshold-percent: 3.0 }

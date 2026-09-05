@@ -6,12 +6,14 @@
 MarketDataConnector(s)
   +-> Binance aggregate TRADE WebSocket
   +-> Binance FUNDING_RATE REST polling
+  +-> Binance OPEN_INTEREST REST polling
   -> canonical MarketEvent with typed payload
   -> Market Signal Router
       +-> TRADE processor -> Rolling Market State -> AnomalyRule implementations
       |                    -> cooldown -> FinancialEvent -> PostgreSQL
       +-> FUNDING_RATE processor -> latest FundingRateState -> FundingExtremeRule
-                               -> cooldown -> FinancialEvent -> PostgreSQL
+      |                        -> cooldown -> FinancialEvent -> PostgreSQL
+      +-> OPEN_INTEREST processor -> latest OpenInterestState (no anomaly event)
 ```
 
 The connector boundary prevents Binance's wire DTO/JSON from entering the domain. The pipeline merges the canonical streams from its registered `MarketDataConnector` implementations, so a future signal connector can be added without changing pipeline control flow. Every canonical `MarketEvent` identifies its exchange in `source` (currently `BINANCE`) and its exchange-independent input kind in `signalType`. `MarketSignalType` contains `TRADE`, `FUNDING_RATE`, `OPEN_INTEREST`, and `LIQUIDATION`; these input types are deliberately separate from anomaly output types such as `RAPID_DROP` and `ABNORMAL_VOLUME` in `FinancialEvent.eventType`.
@@ -44,23 +46,26 @@ Market Signal Router
         |      -> MarketState -> anomaly rules -> FinancialEvent
         +--> FUNDING_RATE processor
         |      -> FundingRateState -> FundingExtremeRule -> FinancialEvent
-        +--> OPEN_INTEREST processor (future)
+        +--> OPEN_INTEREST processor
+        |      -> OpenInterestState (no anomaly yet)
         +--> LIQUIDATION processor (future)
         |
         v
 Current state:
   TRADE -> MarketState -> REST / MCP
   FUNDING_RATE -> FundingRateState -> REST / MCP
+  OPEN_INTEREST -> OpenInterestState -> REST / MCP
 
 Durable anomaly history:
   TRADE anomaly -> FinancialEvent -> PostgreSQL -> REST / MCP
   FUNDING_EXTREME -> FinancialEvent -> PostgreSQL -> REST / MCP
+  OPEN_INTEREST -> no durable anomaly event yet
 ```
 
 The canonical envelope contains source, symbol, signal type, exchange event time, local receive
 time, and a small sealed `MarketSignalPayload`. Only the payloads actually ingested exist:
-`TradePayload(price, quantity)` and `FundingRatePayload(fundingRate, markPrice, indexPrice,
-nextFundingTime)`. Processors fail fast if their signal receives the wrong payload type. This
+`TradePayload(price, quantity)`, `FundingRatePayload(fundingRate, markPrice, indexPrice,
+nextFundingTime)`, and `OpenInterestPayload(openInterest)`. Processors fail fast if their signal receives the wrong payload type. This
 keeps signal-specific values out of nullable envelope fields without introducing serialization
 annotations or speculative payload types.
 
@@ -77,7 +82,7 @@ cooldown centrally. The Binance trade adapter reconnects with capped exponential
 treats malformed messages as isolated input errors. The independent Binance funding adapter
 polls the public USDⓈ-M `/fapi/v1/premiumIndex` endpoint once per configured symbol every 60
 seconds by default. A request or normalization failure is isolated to that poll, so later polls
-continue. Both connectors are disabled independently by default.
+continue. All three connectors are disabled independently by default. The Open Interest adapter polls the public USDⓈ-M `/fapi/v1/openInterest` endpoint per shared configured symbol every 30 seconds, isolates request and normalization failures, and preserves the raw Binance numeric value without deriving a notional.
 
 ## Deliberate constraints
 
@@ -89,12 +94,12 @@ Future stream-processing implementations should replace the connector/state infr
 
 ```text
 Market Feed
-  -> MarketState / FundingRateState / FinancialEvent
+  -> MarketState / FundingRateState / OpenInterestState / FinancialEvent
   -> Application Query Layer
   -> REST adapter + MCP adapter
 ```
 
-`MarketQueryService` and `FinancialEventQueryService` own normalization, validation, limit handling, repository specifications, not-found semantics, and mapping to stable response records. `MarketQueryService` maps both transient current-state types to independent public contracts: trade-derived `MarketStateResponse` and `FundingRateStateResponse`. The latter preserves Binance's decimal funding rate and also supplies a percent representation by moving the decimal point two places. REST controllers and MCP tools are thin adapters over those same services; neither adapter calls the other and neither exposes internal domain records or the JPA entity. Dynamic JPA Specifications cover optional filters without a repository method for every combination. Results sort by `detectedAt`, then `eventTime`, descending.
+`MarketQueryService` and `FinancialEventQueryService` own normalization, validation, limit handling, repository specifications, not-found semantics, and mapping to stable response records. `MarketQueryService` maps all three transient current-state types to independent public contracts: trade-derived `MarketStateResponse`, `FundingRateStateResponse`, and `OpenInterestStateResponse`. The funding response preserves Binance's decimal funding rate and also supplies a percent representation by moving the decimal point two places; the Open Interest response preserves the raw Binance decimal value without inferring a unit or notional. REST controllers and MCP tools are thin adapters over those same services; neither adapter calls the other and neither exposes internal domain records or the JPA entity. Dynamic JPA Specifications cover optional filters without a repository method for every combination. Results sort by `detectedAt`, then `eventTime`, descending.
 
 WebFlux REST calls wrap service work on Reactor's bounded-elastic scheduler. MCP tool execution also moves its callable to bounded elastic before waiting for the structured tool result. Blocking JPA queries therefore do not execute on a Reactor Netty event-loop thread, while JPA remains the persistence technology.
 
@@ -102,10 +107,10 @@ The store maintains an immutable latest `MarketState` record per symbol alongsid
 
 ### In-memory state lifetime
 
-After an application restart, historical `FinancialEvent` rows remain in PostgreSQL, but both
-`MarketState` and `FundingRateState` are lost. A trade-state query returns not found until fresh
+After an application restart, historical `FinancialEvent` rows remain in PostgreSQL, but all three current-state records—
+`MarketState`, `FundingRateState`, and `OpenInterestState`—are lost. A trade-state query returns not found until fresh
 live trades rebuild that symbol's state. A funding-rate-state query returns not found until an
-enabled funding poller completes a successful poll for that symbol. FinStream persists neither
+enabled funding poller completes a successful poll for that symbol. An Open Interest query likewise returns not found until its independent poller succeeds. FinStream persists neither
 current-state model in V0.2: they represent transient market facts, while `FinancialEvent`
 represents durable anomaly history. RisingWave or Flink-backed state remains a future roadmap
 decision.
