@@ -5,7 +5,7 @@
 ## V0.2 capabilities
 
 - Streams Binance public aggregate trades, maintains bounded 30-minute in-memory state, and detects rapid price moves and abnormal volume.
-- Optionally polls Binance's public USDⓈ-M premium-index endpoint for funding rates and the current Open Interest endpoint for Open Interest; each keeps an independent latest snapshot per configured symbol in memory. Funding rates can produce `FUNDING_EXTREME`; Open Interest does not yet produce anomalies.
+- Optionally polls Binance's public USDⓈ-M premium-index endpoint for funding rates and the current Open Interest endpoint. Funding rates can produce `FUNDING_EXTREME`; bounded Open Interest history derives 5-, 15-, and 30-minute changes and can produce `OPEN_INTEREST_SURGE`.
 - Persists only anomaly events to PostgreSQL JSONB while keeping the V0.1 real-time pipeline unchanged.
 - Exposes stable, read-only REST response contracts and six MCP tools through one application query layer.
 - Moves blocking JPA persistence and queries away from Reactor Netty event-loop threads.
@@ -65,10 +65,16 @@ BINANCE_OPEN_INTEREST_ENABLED=true docker compose up -d
 
 It reuses `finstream.market.symbols` and polls every 30 seconds by default; override this with
 `BINANCE_OPEN_INTEREST_POLL_INTERVAL`. FinStream preserves Binance's raw `openInterest` numeric
-value exactly as a `BigDecimal` and does not infer a notional or unit. The latest snapshot is
-in-memory only: it is not stored in PostgreSQL, has no history, and is lost on restart. Until the
-first successful poll, its query returns 404. `OPEN_INTEREST_SURGE` and other Open Interest
-anomalies are not implemented because they require rolling, time-windowed comparisons.
+value exactly as a `BigDecimal` and does not infer a notional or unit. Its latest state and bounded
+35-minute rolling history are in-memory only, are not stored in PostgreSQL, and are lost on restart.
+The current-state response adds nullable `change5mPercent`, `change15mPercent`, and
+`change30mPercent`; `null` means that sufficient event-time history (or a positive reference value)
+is unavailable, not zero change. Until the first successful poll, its query returns 404.
+
+`OPEN_INTEREST_SURGE` uses the fixed 15-minute change and is enabled by default at 5%. Configure
+it with `OPEN_INTEREST_SURGE_ENABLED` and `OPEN_INTEREST_SURGE_THRESHOLD_PERCENT`. The 5% default
+is an initial V0.x heuristic, not an industry standard, and should be tuned from production
+observations. OI growth does not identify long/short direction and FinStream makes no such inference.
 
 Funding anomaly detection is enabled by default once funding ingestion is active. Its
 `finstream.anomaly.funding-extreme.threshold` is a **decimal rate**, with no implicit percent
@@ -125,6 +131,7 @@ curl http://localhost:8080/api/v1/market/BTCUSDT/open-interest
 curl "http://localhost:8080/api/v1/events?symbol=BTCUSDT&limit=10"
 curl "http://localhost:8080/api/v1/events?eventType=RAPID_DROP&limit=20"
 curl "http://localhost:8080/api/v1/events?eventType=FUNDING_EXTREME&limit=20"
+curl "http://localhost:8080/api/v1/events?eventType=OPEN_INTEREST_SURGE&limit=20"
 curl http://localhost:8080/api/v1/events/00000000-0000-0000-0000-000000000000
 curl "http://localhost:8080/api/v1/events/abnormal?since=2026-08-20T00:00:00Z&minScore=1.5&symbol=BTCUSDT&limit=50"
 ```
