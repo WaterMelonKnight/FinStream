@@ -13,7 +13,8 @@ MarketDataConnector(s)
       |                    -> cooldown -> FinancialEvent -> PostgreSQL
       +-> FUNDING_RATE processor -> latest FundingRateState -> FundingExtremeRule
       |                        -> cooldown -> FinancialEvent -> PostgreSQL
-      +-> OPEN_INTEREST processor -> latest OpenInterestState (no anomaly event)
+      +-> OPEN_INTEREST processor -> rolling OpenInterestState -> OpenInterestSurgeRule
+                               -> cooldown -> FinancialEvent -> PostgreSQL
 ```
 
 The connector boundary prevents Binance's wire DTO/JSON from entering the domain. The pipeline merges the canonical streams from its registered `MarketDataConnector` implementations, so a future signal connector can be added without changing pipeline control flow. Every canonical `MarketEvent` identifies its exchange in `source` (currently `BINANCE`) and its exchange-independent input kind in `signalType`. `MarketSignalType` contains `TRADE`, `FUNDING_RATE`, `OPEN_INTEREST`, and `LIQUIDATION`; these input types are deliberately separate from anomaly output types such as `RAPID_DROP` and `ABNORMAL_VOLUME` in `FinancialEvent.eventType`.
@@ -47,7 +48,7 @@ Market Signal Router
         +--> FUNDING_RATE processor
         |      -> FundingRateState -> FundingExtremeRule -> FinancialEvent
         +--> OPEN_INTEREST processor
-        |      -> OpenInterestState (no anomaly yet)
+        |      -> rolling OpenInterestState -> OpenInterestSurgeRule -> FinancialEvent
         +--> LIQUIDATION processor (future)
         |
         v
@@ -59,7 +60,7 @@ Current state:
 Durable anomaly history:
   TRADE anomaly -> FinancialEvent -> PostgreSQL -> REST / MCP
   FUNDING_EXTREME -> FinancialEvent -> PostgreSQL -> REST / MCP
-  OPEN_INTEREST -> no durable anomaly event yet
+  OPEN_INTEREST_SURGE -> FinancialEvent -> PostgreSQL -> REST / MCP
 ```
 
 The canonical envelope contains source, symbol, signal type, exchange event time, local receive
@@ -83,6 +84,15 @@ treats malformed messages as isolated input errors. The independent Binance fund
 polls the public USDⓈ-M `/fapi/v1/premiumIndex` endpoint once per configured symbol every 60
 seconds by default. A request or normalization failure is isolated to that poll, so later polls
 continue. All three connectors are disabled independently by default. The Open Interest adapter polls the public USDⓈ-M `/fapi/v1/openInterest` endpoint per shared configured symbol every 30 seconds, isolates request and normalization failures, and preserves the raw Binance numeric value without deriving a notional.
+
+Open Interest state uses a synchronized deque per symbol and retains 35 minutes, enough for the
+30-minute window plus polling jitter. For each 5-, 15-, or 30-minute window, the reference is the
+newest sample whose event time is at or before `currentEventTime - window`. Selection is therefore
+deterministic, event-time based, independent of sample count, tolerant of polling gaps, and uses no
+interpolation. Until such a sample exists—or when its OI is non-positive—the corresponding change
+is unavailable (`null`). Older events are ignored; equal event times replace the previous sample.
+The 15-minute positive change drives `OPEN_INTEREST_SURGE`; score is change divided by its positive
+configured threshold, with MEDIUM below 2 and HIGH from 2. The rule does not infer position direction.
 
 ## Deliberate constraints
 

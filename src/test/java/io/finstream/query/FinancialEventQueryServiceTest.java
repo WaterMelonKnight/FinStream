@@ -51,6 +51,17 @@ class FinancialEventQueryServiceTest {
     }
 
     @Test
+    void openInterestSurgeUsesTheExistingEventTypeQueryPath() {
+        FinancialEvent event = event(UUID.randomUUID(), "BTCUSDT", "OPEN_INTEREST_SURGE", 1.2);
+        when(repository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(java.util.List.of(event)));
+
+        assertThat(new FinancialEventQueryService(repository)
+                .getRecentEvents(null, "open_interest_surge", 10))
+                .extracting(response -> response.eventType()).containsExactly("OPEN_INTEREST_SURGE");
+    }
+
+    @Test
     void validatesParametersAndProvidesDetailNotFound() {
         when(repository.findById(any())).thenReturn(Optional.empty());
         var service = new FinancialEventQueryService(repository);

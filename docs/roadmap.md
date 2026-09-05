@@ -9,6 +9,6 @@ FinStream will evolve according to measured use and scale; these stages are dire
 - **V0.4 — Evaluation:** historical replay and event-quality evaluation.
 - **V0.5 — Streaming database:** evaluate RisingWave based on observed state and scale needs.
 - **Open Interest current state (implemented):** keyless Binance polling feeds canonical `OPEN_INTEREST` events and transient REST/MCP snapshots.
-- **Future Open Interest analytics:** rolling OI windows may support `OPEN_INTEREST_SURGE` and time-aligned `PRICE_OI_DIVERGENCE`; neither anomaly is currently supported.
+- **Open Interest rolling analytics (implemented):** bounded 5-/15-/30-minute changes support `OPEN_INTEREST_SURGE`; `PRICE_OI_DIVERGENCE` remains future work.
 - **V0.6 — More sources:** liquidation, news, and US equities.
 - **V1.0 — Scale-informed infrastructure:** decide from production evidence whether Kafka, Flink, and ClickHouse are warranted.
