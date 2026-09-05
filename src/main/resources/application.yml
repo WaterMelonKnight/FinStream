@@ -34,3 +34,7 @@ finstream:
     rapid-drop: { enabled: true, threshold-percent: 3.0 }
     rapid-pump: { enabled: true, threshold-percent: 3.0 }
     abnormal-volume: { enabled: true, ratio: 3.0 }
+    # Decimal rate: 0.001 = 0.1% (and 0.0001 = 0.01%); no implicit percent conversion.
+    funding-extreme:
+      enabled: ${FUNDING_EXTREME_ENABLED:true}
+      threshold: ${FUNDING_EXTREME_THRESHOLD:0.001}

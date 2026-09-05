@@ -5,7 +5,7 @@
 ## V0.2 capabilities
 
 - Streams Binance public aggregate trades, maintains bounded 30-minute in-memory state, and detects rapid price moves and abnormal volume.
-- Optionally polls Binance's public USDⓈ-M premium-index endpoint for funding rates and keeps the latest snapshot per configured symbol in memory.
+- Optionally polls Binance's public USDⓈ-M premium-index endpoint for funding rates, keeps the latest snapshot per configured symbol in memory, and detects extreme absolute funding rates.
 - Persists only anomaly events to PostgreSQL JSONB while keeping the V0.1 real-time pipeline unchanged.
 - Exposes stable, read-only REST response contracts and four MCP tools through one application query layer.
 - Moves blocking JPA persistence and queries away from Reactor Netty event-loop threads.
@@ -54,6 +54,13 @@ The poller reuses `finstream.market.symbols`. Override its interval, if needed, 
 `BINANCE_FUNDING_POLL_INTERVAL` (for example, `30s`). Funding snapshots are currently
 in-memory only and are not exposed through REST or MCP.
 
+Funding anomaly detection is enabled by default once funding ingestion is active. Its
+`finstream.anomaly.funding-extreme.threshold` is a **decimal rate**, with no implicit percent
+conversion: the default `0.001` means `0.1%`, while `0.0001` means `0.01%`. Override the rule
+with `FUNDING_EXTREME_ENABLED` and `FUNDING_EXTREME_THRESHOLD`. Positive and negative rates are
+compared by absolute value and both produce the unified `FUNDING_EXTREME` event type; direction
+and both decimal/percent values are retained in event metrics.
+
 Stop the containers while retaining PostgreSQL data:
 
 ```bash
@@ -99,6 +106,7 @@ List limits default to 50, reject values below 1, and are capped at 200. Symbols
 curl http://localhost:8080/api/v1/market/BTCUSDT/state
 curl "http://localhost:8080/api/v1/events?symbol=BTCUSDT&limit=10"
 curl "http://localhost:8080/api/v1/events?eventType=RAPID_DROP&limit=20"
+curl "http://localhost:8080/api/v1/events?eventType=FUNDING_EXTREME&limit=20"
 curl http://localhost:8080/api/v1/events/00000000-0000-0000-0000-000000000000
 curl "http://localhost:8080/api/v1/events/abnormal?since=2026-08-20T00:00:00Z&minScore=1.5&symbol=BTCUSDT&limit=50"
 ```

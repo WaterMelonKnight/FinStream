@@ -1,5 +1,6 @@
 package io.finstream.service;
 
+import io.finstream.anomaly.FundingRateAnomalyRule;
 import io.finstream.domain.FinancialEvent;
 import io.finstream.domain.FundingRatePayload;
 import io.finstream.domain.FundingRateState;
@@ -12,9 +13,12 @@ import org.springframework.stereotype.Component;
 @Component
 public class FundingRateMarketSignalProcessor implements MarketSignalProcessor {
     private final FundingRateStateStore states;
+    private final List<FundingRateAnomalyRule> rules;
 
-    public FundingRateMarketSignalProcessor(FundingRateStateStore states) {
+    public FundingRateMarketSignalProcessor(
+            FundingRateStateStore states, List<FundingRateAnomalyRule> rules) {
         this.states = states;
+        this.rules = List.copyOf(rules);
     }
 
     @Override
@@ -28,10 +32,11 @@ public class FundingRateMarketSignalProcessor implements MarketSignalProcessor {
                 || !(event.payload() instanceof FundingRatePayload payload)) {
             throw new IllegalArgumentException("FUNDING_RATE processor requires a FundingRatePayload");
         }
-        states.update(new FundingRateState(
+        FundingRateState state = states.update(new FundingRateState(
                 event.symbol(), event.source(), payload.fundingRate(), payload.markPrice(),
                 payload.indexPrice(), payload.nextFundingTime(), event.eventTime(),
                 event.receivedAt()));
-        return List.of();
+        return rules.stream().map(rule -> rule.evaluate(event, state))
+                .flatMap(java.util.Optional::stream).toList();
     }
 }
