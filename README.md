@@ -7,7 +7,7 @@
 - Streams Binance public aggregate trades, maintains bounded 30-minute in-memory state, and detects rapid price moves and abnormal volume.
 - Optionally polls Binance's public USDⓈ-M premium-index endpoint for funding rates, keeps the latest snapshot per configured symbol in memory, and detects extreme absolute funding rates.
 - Persists only anomaly events to PostgreSQL JSONB while keeping the V0.1 real-time pipeline unchanged.
-- Exposes stable, read-only REST response contracts and four MCP tools through one application query layer.
+- Exposes stable, read-only REST response contracts and five MCP tools through one application query layer.
 - Moves blocking JPA persistence and queries away from Reactor Netty event-loop threads.
 
 **FinStream MCP provides read-only market context and anomaly event access.** It has no order, account, wallet, or other trading tools.
@@ -51,8 +51,10 @@ BINANCE_FUNDING_ENABLED=true docker compose up -d
 ```
 
 The poller reuses `finstream.market.symbols`. Override its interval, if needed, with
-`BINANCE_FUNDING_POLL_INTERVAL` (for example, `30s`). Funding snapshots are currently
-in-memory only and are not exposed through REST or MCP.
+`BINANCE_FUNDING_POLL_INTERVAL` (for example, `30s`). Funding snapshots are in-memory only.
+After startup or restart, the funding-rate state endpoint returns 404 until the poller produces
+its first successful snapshot for the requested symbol; it can also remain unavailable when
+funding ingestion is disabled or Binance cannot be reached.
 
 Funding anomaly detection is enabled by default once funding ingestion is active. Its
 `finstream.anomaly.funding-extreme.threshold` is a **decimal rate**, with no implicit percent
@@ -104,6 +106,7 @@ List limits default to 50, reject values below 1, and are capped at 200. Symbols
 
 ```bash
 curl http://localhost:8080/api/v1/market/BTCUSDT/state
+curl http://localhost:8080/api/v1/market/BTCUSDT/funding-rate
 curl "http://localhost:8080/api/v1/events?symbol=BTCUSDT&limit=10"
 curl "http://localhost:8080/api/v1/events?eventType=RAPID_DROP&limit=20"
 curl "http://localhost:8080/api/v1/events?eventType=FUNDING_EXTREME&limit=20"
@@ -114,11 +117,17 @@ curl "http://localhost:8080/api/v1/events/abnormal?since=2026-08-20T00:00:00Z&mi
 The endpoints are:
 
 - `GET /api/v1/market/{symbol}/state`
+- `GET /api/v1/market/{symbol}/funding-rate`
 - `GET /api/v1/events`
 - `GET /api/v1/events/{eventId}`
 - `GET /api/v1/events/abnormal`
 
 Invalid input and missing resources use stable JSON errors with `code`, `message`, and `timestamp`.
+The funding-rate response reports Binance's decimal `fundingRate` (for example, `0.001`) and
+the human-readable `fundingRatePercent` (for example, `0.1`, meaning `0.1%`) alongside mark and
+index prices and funding, exchange-event, and receive timestamps. It is a current-state view,
+not funding history. Set `BINANCE_FUNDING_ENABLED=true`; state exists only after a successful
+poll and is lost on application restart until the next successful poll.
 
 ## MCP server
 
@@ -127,6 +136,7 @@ FinStream embeds the official Spring AI `spring-ai-starter-mcp-server-webflux` 1
 Available tools:
 
 - `get_market_state(symbol)`
+- `get_funding_rate_state(symbol)`
 - `get_recent_events(symbol?, eventType?, limit?)`
 - `get_event_detail(eventId)`
 - `get_abnormal_events(since?, minScore?, symbol?, limit?)`

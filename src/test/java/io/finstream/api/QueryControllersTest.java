@@ -4,6 +4,7 @@ import static org.mockito.Mockito.when;
 
 import io.finstream.query.FinancialEventQueryService;
 import io.finstream.query.FinancialEventResponse;
+import io.finstream.query.FundingRateStateResponse;
 import io.finstream.query.MarketQueryService;
 import io.finstream.query.MarketStateResponse;
 import io.finstream.query.QueryException;
@@ -46,6 +47,25 @@ class QueryControllersTest {
     }
 
     @Test
+    void fundingRateStateSuccessAndNotFound() {
+        when(markets.getFundingRateState("BTCUSDT")).thenReturn(fundingRateState());
+        client.get().uri("/api/v1/market/BTCUSDT/funding-rate").exchange()
+                .expectStatus().isOk().expectBody()
+                .jsonPath("$.source").isEqualTo("BINANCE")
+                .jsonPath("$.symbol").isEqualTo("BTCUSDT")
+                .jsonPath("$.fundingRate").isEqualTo(0.001)
+                .jsonPath("$.fundingRatePercent").isEqualTo(0.1)
+                .jsonPath("$.markPrice").isEqualTo(111234.50)
+                .jsonPath("$.indexPrice").isEqualTo(111200.25);
+
+        when(markets.getFundingRateState("MISSING")).thenThrow(new QueryException(
+                "FUNDING_RATE_STATE_NOT_FOUND", "missing", true));
+        client.get().uri("/api/v1/market/MISSING/funding-rate").exchange()
+                .expectStatus().isNotFound().expectBody()
+                .jsonPath("$.code").isEqualTo("FUNDING_RATE_STATE_NOT_FOUND");
+    }
+
+    @Test
     void recentFilterDetailAndAbnormalFilter() {
         var response = event();
         when(events.getRecentEvents("BTCUSDT", "RAPID_DROP", 20)).thenReturn(List.of(response));
@@ -80,6 +100,13 @@ class QueryControllersTest {
     private MarketStateResponse state() {
         return new MarketStateResponse("BTCUSDT", Instant.EPOCH, BigDecimal.TEN,
                 0, 0, 0, 1, 1, BigDecimal.TEN, BigDecimal.TEN, 1, true);
+    }
+
+    private FundingRateStateResponse fundingRateState() {
+        return new FundingRateStateResponse(
+                "BINANCE", "BTCUSDT", new BigDecimal("0.001"), new BigDecimal("0.1"),
+                new BigDecimal("111234.50"), new BigDecimal("111200.25"),
+                Instant.EPOCH.plusSeconds(3600), Instant.EPOCH, Instant.EPOCH.plusSeconds(1));
     }
 
     private FinancialEventResponse event() {
