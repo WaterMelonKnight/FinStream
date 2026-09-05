@@ -1,5 +1,6 @@
 package io.finstream.config;
 
+import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.List;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -8,7 +9,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public record FinStreamProperties(Market market, Anomaly anomaly) {
     public FinStreamProperties {
         market = market == null ? new Market(null, null) : market;
-        anomaly = anomaly == null ? new Anomaly(null, null, null, null) : anomaly;
+        anomaly = anomaly == null ? new Anomaly(null, null, null, null, null) : anomaly;
     }
 
     public record Market(List<String> symbols, Binance binance) {
@@ -44,16 +45,34 @@ public record FinStreamProperties(Market market, Anomaly anomaly) {
     }
 
     public record Anomaly(
-            Duration cooldown, Rule rapidDrop, Rule rapidPump, VolumeRule abnormalVolume) {
+            Duration cooldown, Rule rapidDrop, Rule rapidPump, VolumeRule abnormalVolume,
+            FundingExtreme fundingExtreme) {
+        public Anomaly(Duration cooldown, Rule rapidDrop, Rule rapidPump, VolumeRule abnormalVolume) {
+            this(cooldown, rapidDrop, rapidPump, abnormalVolume, null);
+        }
+
         public Anomaly {
             cooldown = cooldown == null ? Duration.ofMinutes(10) : cooldown;
             rapidDrop = rapidDrop == null ? new Rule(true, 3) : rapidDrop;
             rapidPump = rapidPump == null ? new Rule(true, 3) : rapidPump;
             abnormalVolume = abnormalVolume == null ? new VolumeRule(true, 3) : abnormalVolume;
+            fundingExtreme = fundingExtreme == null
+                    ? new FundingExtreme(true, new BigDecimal("0.001"))
+                    : fundingExtreme;
         }
     }
 
     public record Rule(boolean enabled, double thresholdPercent) {}
 
     public record VolumeRule(boolean enabled, double ratio) {}
+
+    /** Threshold is a decimal rate: 0.001 means 0.1%. */
+    public record FundingExtreme(boolean enabled, BigDecimal threshold) {
+        public FundingExtreme {
+            threshold = threshold == null ? new BigDecimal("0.001") : threshold;
+            if (threshold.signum() <= 0) {
+                throw new IllegalArgumentException("Funding extreme threshold must be positive");
+            }
+        }
+    }
 }

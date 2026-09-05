@@ -7,7 +7,7 @@ final class QueryParameters {
     static final int DEFAULT_LIMIT = 50;
     static final int MAX_LIMIT = 200;
     private static final Set<String> EVENT_TYPES =
-            Set.of("RAPID_DROP", "RAPID_PUMP", "ABNORMAL_VOLUME");
+            Set.of("RAPID_DROP", "RAPID_PUMP", "ABNORMAL_VOLUME", "FUNDING_EXTREME");
 
     private QueryParameters() {}
 

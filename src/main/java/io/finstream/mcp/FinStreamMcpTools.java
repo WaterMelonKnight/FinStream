@@ -30,7 +30,7 @@ public class FinStreamMcpTools {
     @Tool(name = "get_recent_events", description = "Get recent anomaly events, newest first. All filters are optional. Read-only.")
     public McpToolResult getRecentEvents(
             @ToolParam(description = "Optional market symbol", required = false) String symbol,
-            @ToolParam(description = "Optional event type: RAPID_DROP, RAPID_PUMP, or ABNORMAL_VOLUME", required = false) String eventType,
+            @ToolParam(description = "Optional event type: RAPID_DROP, RAPID_PUMP, ABNORMAL_VOLUME, or FUNDING_EXTREME", required = false) String eventType,
             @ToolParam(description = "Optional result limit; defaults to 50 and is capped at 200", required = false) Integer limit) {
         return execute(() -> events.getRecentEvents(symbol, eventType, limit));
     }

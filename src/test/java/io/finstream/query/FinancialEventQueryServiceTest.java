@@ -40,6 +40,17 @@ class FinancialEventQueryServiceTest {
     }
 
     @Test
+    void fundingExtremeUsesTheExistingEventTypeQueryPath() {
+        FinancialEvent event = event(UUID.randomUUID(), "BTCUSDT", "FUNDING_EXTREME", 1.2);
+        when(repository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(java.util.List.of(event)));
+
+        assertThat(new FinancialEventQueryService(repository)
+                .getRecentEvents(null, "funding_extreme", 10))
+                .extracting(response -> response.eventType()).containsExactly("FUNDING_EXTREME");
+    }
+
+    @Test
     void validatesParametersAndProvidesDetailNotFound() {
         when(repository.findById(any())).thenReturn(Optional.empty());
         var service = new FinancialEventQueryService(repository);

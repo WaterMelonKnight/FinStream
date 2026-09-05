@@ -10,7 +10,8 @@ MarketDataConnector(s)
   -> Market Signal Router
       +-> TRADE processor -> Rolling Market State -> AnomalyRule implementations
       |                    -> cooldown -> FinancialEvent -> PostgreSQL
-      +-> FUNDING_RATE processor -> latest FundingRateState (no anomaly yet)
+      +-> FUNDING_RATE processor -> latest FundingRateState -> FundingExtremeRule
+                               -> cooldown -> FinancialEvent -> PostgreSQL
 ```
 
 The connector boundary prevents Binance's wire DTO/JSON from entering the domain. The pipeline merges the canonical streams from its registered `MarketDataConnector` implementations, so a future signal connector can be added without changing pipeline control flow. Every canonical `MarketEvent` identifies its exchange in `source` (currently `BINANCE`) and its exchange-independent input kind in `signalType`. `MarketSignalType` contains `TRADE`, `FUNDING_RATE`, `OPEN_INTEREST`, and `LIQUIDATION`; these input types are deliberately separate from anomaly output types such as `RAPID_DROP` and `ABNORMAL_VOLUME` in `FinancialEvent.eventType`.
@@ -24,9 +25,10 @@ noteworthy `FinancialEvent` objects cross the persistence boundary; raw trades r
 
 The `FUNDING_RATE` processor validates its typed payload and replaces the symbol's latest
 `FundingRateState`. That snapshot contains source, symbol, funding rate, mark and index prices,
-next funding time, Binance event time, and local receive time. It is deliberately in memory,
-does not run anomaly rules, and returns no `FinancialEvent`. `FUNDING_EXTREME` is not yet
-implemented, and funding state is not exposed through REST or MCP.
+next funding time, Binance event time, and local receive time. It remains deliberately in memory
+and is updated before the independent `FundingExtremeRule` runs. The rule emits a standard
+`FinancialEvent(eventType=FUNDING_EXTREME)` when `abs(fundingRate) >= threshold`; it does not
+persist raw funding data, and funding state is not exposed through REST or MCP.
 
 ```text
 MarketDataConnector
@@ -40,7 +42,7 @@ Market Signal Router
         +--> TRADE processor
         |      -> MarketState -> anomaly rules -> FinancialEvent
         +--> FUNDING_RATE processor
-        |      -> FundingRateState -> no anomaly yet
+        |      -> FundingRateState -> FundingExtremeRule -> FinancialEvent
         +--> OPEN_INTEREST processor (future)
         +--> LIQUIDATION processor (future)
         |
@@ -60,7 +62,10 @@ ABNORMAL_VOLUME compares the current one-minute volume with the per-minute avera
 State calculation stays on the streaming path, while blocking JPA saves are scheduled on Reactor's shared bounded-elastic scheduler. A cooldown key is reserved while a save is in flight and committed only after persistence succeeds; failures release the reservation for a later trade to retry.
 
 Cooldown is keyed by `symbol + eventType`, so a condition that remains true cannot create an
-event on every trade. Configuration properties bind sources, shared symbols, thresholds, and
+event on every trade or funding poll. The funding threshold uses Binance's decimal-rate unit:
+`0.001` means `0.1%` and `0.0001` means `0.01%`; no percent conversion is implicit. Its score is
+`abs(fundingRate) / threshold`, with MEDIUM below 2 and HIGH at 2 or above, matching the existing
+string severity convention. Configuration properties bind sources, shared symbols, thresholds, and
 cooldown centrally. The Binance trade adapter reconnects with capped exponential backoff and
 treats malformed messages as isolated input errors. The independent Binance funding adapter
 polls the public USDⓈ-M `/fapi/v1/premiumIndex` endpoint once per configured symbol every 60

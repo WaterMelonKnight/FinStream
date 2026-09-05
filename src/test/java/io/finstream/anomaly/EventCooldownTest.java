@@ -34,6 +34,17 @@ class EventCooldownTest {
         assertThat(cooldown.reserve("BTCUSDT", "RAPID_DROP")).isPresent();
     }
 
+    @Test
+    void repeatedFundingExtremeUsesExistingSymbolAndEventTypeCooldown() {
+        EventCooldown cooldown = fixedCooldown();
+        EventCooldown.Reservation reservation =
+                cooldown.reserve("BTCUSDT", "FUNDING_EXTREME").orElseThrow();
+        cooldown.commit(reservation);
+
+        assertThat(cooldown.reserve("BTCUSDT", "FUNDING_EXTREME")).isEmpty();
+        assertThat(cooldown.reserve("ETHUSDT", "FUNDING_EXTREME")).isPresent();
+    }
+
     private EventCooldown fixedCooldown() {
         return new EventCooldown(
                 Duration.ofMinutes(5), Clock.fixed(Instant.EPOCH, ZoneOffset.UTC));
