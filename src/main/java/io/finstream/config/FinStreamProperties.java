@@ -21,9 +21,15 @@ public record FinStreamProperties(Market market, Anomaly anomaly) {
         }
     }
 
-    public record Binance(boolean enabled, String baseUrl, FundingRate fundingRate) {
+    public record Binance(
+            boolean enabled, String baseUrl, FundingRate fundingRate,
+            OpenInterest openInterest) {
         public Binance(boolean enabled, String baseUrl) {
-            this(enabled, baseUrl, null);
+            this(enabled, baseUrl, null, null);
+        }
+
+        public Binance(boolean enabled, String baseUrl, FundingRate fundingRate) {
+            this(enabled, baseUrl, fundingRate, null);
         }
 
         public Binance {
@@ -31,6 +37,17 @@ public record FinStreamProperties(Market market, Anomaly anomaly) {
                     ? "wss://stream.binance.com:9443/stream?streams="
                     : baseUrl;
             fundingRate = fundingRate == null ? new FundingRate(false, null, null) : fundingRate;
+            openInterest = openInterest == null ? new OpenInterest(false, null, null) : openInterest;
+        }
+    }
+
+    public record OpenInterest(boolean enabled, String baseUrl, Duration pollInterval) {
+        public OpenInterest {
+            baseUrl = baseUrl == null ? "https://fapi.binance.com" : baseUrl;
+            pollInterval = pollInterval == null ? Duration.ofSeconds(30) : pollInterval;
+            if (pollInterval.isZero() || pollInterval.isNegative()) {
+                throw new IllegalArgumentException("Open interest poll interval must be positive");
+            }
         }
     }
 

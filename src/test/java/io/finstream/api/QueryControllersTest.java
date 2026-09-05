@@ -7,6 +7,7 @@ import io.finstream.query.FinancialEventResponse;
 import io.finstream.query.FundingRateStateResponse;
 import io.finstream.query.MarketQueryService;
 import io.finstream.query.MarketStateResponse;
+import io.finstream.query.OpenInterestStateResponse;
 import io.finstream.query.QueryException;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -63,6 +64,24 @@ class QueryControllersTest {
         client.get().uri("/api/v1/market/MISSING/funding-rate").exchange()
                 .expectStatus().isNotFound().expectBody()
                 .jsonPath("$.code").isEqualTo("FUNDING_RATE_STATE_NOT_FOUND");
+    }
+
+    @Test
+    void openInterestStateSuccessAndNotFound() {
+        when(markets.getOpenInterestState("BTCUSDT")).thenReturn(new OpenInterestStateResponse(
+                "BINANCE", "BTCUSDT", new BigDecimal("12345.67890123456789"),
+                Instant.EPOCH, Instant.EPOCH.plusSeconds(1)));
+        client.get().uri("/api/v1/market/BTCUSDT/open-interest").exchange()
+                .expectStatus().isOk().expectBody()
+                .jsonPath("$.source").isEqualTo("BINANCE")
+                .jsonPath("$.symbol").isEqualTo("BTCUSDT")
+                .jsonPath("$.openInterest").isEqualTo(12345.67890123456789);
+
+        when(markets.getOpenInterestState("MISSING")).thenThrow(new QueryException(
+                "OPEN_INTEREST_STATE_NOT_FOUND", "missing", true));
+        client.get().uri("/api/v1/market/MISSING/open-interest").exchange()
+                .expectStatus().isNotFound().expectBody()
+                .jsonPath("$.code").isEqualTo("OPEN_INTEREST_STATE_NOT_FOUND");
     }
 
     @Test
