@@ -28,7 +28,8 @@ The `FUNDING_RATE` processor validates its typed payload and replaces the symbol
 next funding time, Binance event time, and local receive time. It remains deliberately in memory
 and is updated before the independent `FundingExtremeRule` runs. The rule emits a standard
 `FinancialEvent(eventType=FUNDING_EXTREME)` when `abs(fundingRate) >= threshold`; it does not
-persist raw funding data, and funding state is not exposed through REST or MCP.
+persist raw funding data. The latest snapshot is exposed read-only through the shared query layer
+to REST and MCP without exposing the internal domain record.
 
 ```text
 MarketDataConnector
@@ -47,7 +48,13 @@ Market Signal Router
         +--> LIQUIDATION processor (future)
         |
         v
-FinancialEvent -> PostgreSQL -> REST / MCP
+Current state:
+  TRADE -> MarketState -> REST / MCP
+  FUNDING_RATE -> FundingRateState -> REST / MCP
+
+Durable anomaly history:
+  TRADE anomaly -> FinancialEvent -> PostgreSQL -> REST / MCP
+  FUNDING_EXTREME -> FinancialEvent -> PostgreSQL -> REST / MCP
 ```
 
 The canonical envelope contains source, symbol, signal type, exchange event time, local receive
@@ -82,12 +89,12 @@ Future stream-processing implementations should replace the connector/state infr
 
 ```text
 Market Feed
-  -> MarketState / FinancialEvent
+  -> MarketState / FundingRateState / FinancialEvent
   -> Application Query Layer
   -> REST adapter + MCP adapter
 ```
 
-`MarketQueryService` and `FinancialEventQueryService` own normalization, validation, limit handling, repository specifications, not-found semantics, and mapping to stable response records. REST controllers and MCP tools are thin adapters over those same services; neither adapter calls the other and neither exposes the JPA entity. Dynamic JPA Specifications cover optional filters without a repository method for every combination. Results sort by `detectedAt`, then `eventTime`, descending.
+`MarketQueryService` and `FinancialEventQueryService` own normalization, validation, limit handling, repository specifications, not-found semantics, and mapping to stable response records. `MarketQueryService` maps both transient current-state types to independent public contracts: trade-derived `MarketStateResponse` and `FundingRateStateResponse`. The latter preserves Binance's decimal funding rate and also supplies a percent representation by moving the decimal point two places. REST controllers and MCP tools are thin adapters over those same services; neither adapter calls the other and neither exposes internal domain records or the JPA entity. Dynamic JPA Specifications cover optional filters without a repository method for every combination. Results sort by `detectedAt`, then `eventTime`, descending.
 
 WebFlux REST calls wrap service work on Reactor's bounded-elastic scheduler. MCP tool execution also moves its callable to bounded elastic before waiting for the structured tool result. Blocking JPA queries therefore do not execute on a Reactor Netty event-loop thread, while JPA remains the persistence technology.
 
@@ -95,4 +102,10 @@ The store maintains an immutable latest `MarketState` record per symbol alongsid
 
 ### In-memory state lifetime
 
-After an application restart, historical `FinancialEvent` rows remain in PostgreSQL, but `MarketState` is lost. A market-state query returns not found until fresh live trades rebuild that symbol's state. FinStream does not persist `MarketState` in V0.2. RisingWave or Flink-backed state remains a future roadmap decision.
+After an application restart, historical `FinancialEvent` rows remain in PostgreSQL, but both
+`MarketState` and `FundingRateState` are lost. A trade-state query returns not found until fresh
+live trades rebuild that symbol's state. A funding-rate-state query returns not found until an
+enabled funding poller completes a successful poll for that symbol. FinStream persists neither
+current-state model in V0.2: they represent transient market facts, while `FinancialEvent`
+represents durable anomaly history. RisingWave or Flink-backed state remains a future roadmap
+decision.

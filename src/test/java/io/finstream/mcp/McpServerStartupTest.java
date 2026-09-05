@@ -17,6 +17,7 @@ class McpServerStartupTest {
                 .extracting(callback -> callback.getToolDefinition().name())
                 .containsExactlyInAnyOrder(
                         "get_market_state",
+                        "get_funding_rate_state",
                         "get_recent_events",
                         "get_event_detail",
                         "get_abnormal_events");

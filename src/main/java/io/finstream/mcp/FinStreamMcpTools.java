@@ -27,6 +27,12 @@ public class FinStreamMcpTools {
         return execute(() -> markets.getMarketState(symbol));
     }
 
+    @Tool(name = "get_funding_rate_state", description = "Get the latest in-memory funding-rate snapshot for a symbol. Read-only. fundingRate is the decimal rate; fundingRatePercent is its percent representation.")
+    public McpToolResult getFundingRateState(
+            @ToolParam(description = "Market symbol, for example BTCUSDT") String symbol) {
+        return execute(() -> markets.getFundingRateState(symbol));
+    }
+
     @Tool(name = "get_recent_events", description = "Get recent anomaly events, newest first. All filters are optional. Read-only.")
     public McpToolResult getRecentEvents(
             @ToolParam(description = "Optional market symbol", required = false) String symbol,
