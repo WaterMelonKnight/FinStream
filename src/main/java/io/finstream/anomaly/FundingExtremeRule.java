@@ -56,7 +56,7 @@ public class FundingExtremeRule implements FundingRateAnomalyRule {
         if (state.nextFundingTime() != null) metrics.put("nextFundingTime", state.nextFundingTime().toString());
 
         String summary = String.format(Locale.ROOT,
-                "%s funding rate reached %s%%, exceeding the configured absolute %s%% threshold.",
+                "%s funding rate reached %s%%, meeting or exceeding the configured absolute %s%% threshold.",
                 event.symbol(), signed(ratePercent), thresholdPercent.stripTrailingZeros().toPlainString());
         return Optional.of(new FinancialEvent(
                 UUID.randomUUID(), event.source(), event.symbol(), EVENT_TYPE, event.eventTime(),

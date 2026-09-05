@@ -45,7 +45,7 @@ class FundingExtremeRuleTest {
                 .containsEntry("indexPrice", new BigDecimal("99990"))
                 .containsEntry("direction", "POSITIVE");
         assertThat(result.getEvidence()).containsEntry("direction", "POSITIVE");
-        assertThat(result.getSummary()).contains("+0.1%", "0.1% threshold")
+        assertThat(result.getSummary()).contains("+0.1%", "meeting or exceeding", "0.1% threshold")
                 .doesNotContain("buy", "sell", "long", "short", "should trade");
     }
 
