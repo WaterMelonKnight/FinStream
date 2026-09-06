@@ -89,8 +89,10 @@ Open Interest state uses a synchronized deque per symbol and retains 35 minutes,
 30-minute window plus polling jitter. For each 5-, 15-, or 30-minute window, the reference is the
 newest sample whose event time is at or before `currentEventTime - window`. Selection is therefore
 deterministic, event-time based, independent of sample count, tolerant of polling gaps, and uses no
-interpolation. Until such a sample exists—or when its OI is non-positive—the corresponding change
-is unavailable (`null`). Older events are ignored; equal event times replace the previous sample.
+interpolation. That candidate must be no more than two minutes older than the target: short polling
+gaps are tolerated, but stale historical samples are not reused as misleading window references.
+Until such a fresh sample exists—or when its OI is non-positive—the corresponding change is
+unavailable (`null`). Older events are ignored; equal event times replace the previous sample.
 The 15-minute positive change drives `OPEN_INTEREST_SURGE`; score is change divided by its positive
 configured threshold, with MEDIUM below 2 and HIGH from 2. The rule does not infer position direction.
 

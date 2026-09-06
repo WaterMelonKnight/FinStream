@@ -18,6 +18,7 @@ import org.springframework.stereotype.Component;
 public class InMemoryOpenInterestStateStore implements OpenInterestStateStore {
     private static final Logger log = LoggerFactory.getLogger(InMemoryOpenInterestStateStore.class);
     static final Duration HISTORY_RETENTION = Duration.ofMinutes(35);
+    static final Duration REFERENCE_MAX_LAG = Duration.ofMinutes(2);
     private static final Duration FIVE_MINUTES = Duration.ofMinutes(5);
     private static final Duration FIFTEEN_MINUTES = Duration.ofMinutes(15);
     private static final Duration THIRTY_MINUTES = Duration.ofMinutes(30);
@@ -66,7 +67,9 @@ public class InMemoryOpenInterestStateStore implements OpenInterestStateStore {
 
     /**
      * Selects the newest observation at or before {@code currentTime - window}. This is based on
-     * event time rather than sample count, tolerates polling gaps, and never interpolates.
+     * event time rather than sample count and never interpolates. The candidate must be no more
+     * than two minutes older than the target, tolerating short polling gaps without reusing stale
+     * history as a misleading window reference.
      */
     private Reference reference(Deque<OpenInterestState> samples, Instant currentTime, Duration window) {
         Instant target = currentTime.minus(window);
@@ -75,7 +78,11 @@ public class InMemoryOpenInterestStateStore implements OpenInterestStateStore {
             if (sample.eventTime().isAfter(target)) break;
             selected = sample;
         }
-        return selected == null ? null : new Reference(selected.openInterest(), selected.eventTime());
+        if (selected == null
+                || Duration.between(selected.eventTime(), target).compareTo(REFERENCE_MAX_LAG) > 0) {
+            return null;
+        }
+        return new Reference(selected.openInterest(), selected.eventTime());
     }
 
     private BigDecimal change(BigDecimal current, Reference reference) {

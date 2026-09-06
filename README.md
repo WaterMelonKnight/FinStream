@@ -69,7 +69,10 @@ value exactly as a `BigDecimal` and does not infer a notional or unit. Its lates
 35-minute rolling history are in-memory only, are not stored in PostgreSQL, and are lost on restart.
 The current-state response adds nullable `change5mPercent`, `change15mPercent`, and
 `change30mPercent`; `null` means that sufficient event-time history (or a positive reference value)
-is unavailable, not zero change. Until the first successful poll, its query returns 404.
+is unavailable, not zero change. A reference is the newest sample at or before the window target
+and must be within two minutes of that target. This tolerates short polling gaps, while stale
+historical samples are not reused as misleading window references. Until the first successful
+poll, its query returns 404.
 
 `OPEN_INTEREST_SURGE` uses the fixed 15-minute change and is enabled by default at 5%. Configure
 it with `OPEN_INTEREST_SURGE_ENABLED` and `OPEN_INTEREST_SURGE_THRESHOLD_PERCENT`. The 5% default

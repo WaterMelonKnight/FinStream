@@ -29,7 +29,8 @@ class OpenInterestSurgeRuleTest {
             assertThat(value.getAnomalyScore()).isEqualTo(1.0);
             assertThat(value.getMetrics()).containsEntry("windowMinutes", 15)
                     .containsEntry("referenceOpenInterest", new BigDecimal("100"));
-            assertThat(value.getSummary()).doesNotContain("bullish", "long", "buy");
+            assertThat(value.getSummary()).doesNotContain(
+                    "bullish", "bearish", "long", "short", "buy", "sell", "should trade");
         });
     }
 
@@ -39,9 +40,22 @@ class OpenInterestSurgeRuleTest {
                 new FinStreamProperties.OpenInterestSurge(true, new BigDecimal("5")), Clock.systemUTC());
         assertThat(enabled.evaluate(event(), state("100", null, null))).isEmpty();
         assertThat(enabled.evaluate(event(), state("90", "-10", "100"))).isEmpty();
+        assertThat(enabled.evaluate(event(), state("104.99", "4.99", "100"))).isEmpty();
         var disabled = new OpenInterestSurgeRule(
                 new FinStreamProperties.OpenInterestSurge(false, new BigDecimal("5")), Clock.systemUTC());
         assertThat(disabled.evaluate(event(), state("110", "10", "100"))).isEmpty();
+    }
+
+    @Test
+    void scoreOfTwoProducesHighSeverity() {
+        var rule = new OpenInterestSurgeRule(
+                new FinStreamProperties.OpenInterestSurge(true, new BigDecimal("5")), Clock.systemUTC());
+
+        assertThat(rule.evaluate(event(), state("110", "10", "100")))
+                .hasValueSatisfying(value -> {
+                    assertThat(value.getAnomalyScore()).isEqualTo(2.0);
+                    assertThat(value.getSeverity()).isEqualTo("HIGH");
+                });
     }
 
     private MarketEvent event() {

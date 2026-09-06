@@ -63,6 +63,43 @@ class InMemoryOpenInterestStateStoreTest {
         assertThat(store.get("BTCUSDT").orElseThrow().change30mPercent()).isNull();
     }
 
+    @Test
+    void doesNotReuseThirtyMinuteOldSampleAsFifteenMinuteReference() {
+        var store = new InMemoryOpenInterestStateStore();
+        Instant start = Instant.parse("2026-01-01T00:00:00Z");
+        store.update(state("BTCUSDT", "100", start));
+
+        var current = store.update(state("BTCUSDT", "110", start.plusSeconds(30 * 60)));
+
+        assertThat(current.change15mPercent()).isNull();
+        assertThat(current.change5mPercent()).isNull();
+        assertThat(current.change30mPercent()).isEqualByComparingTo("10");
+    }
+
+    @Test
+    void usesReferenceNearTargetAndAppliesFreshnessPolicyToEveryWindow() {
+        var store = new InMemoryOpenInterestStateStore();
+        Instant start = Instant.parse("2026-01-01T00:00:00Z");
+        store.update(state("BTCUSDT", "100", start.plusSeconds(13 * 60 + 30)));
+
+        var current = store.update(state("BTCUSDT", "110", start.plusSeconds(29 * 60)));
+
+        assertThat(current.change15mPercent()).isEqualByComparingTo("10");
+        assertThat(current.referenceEventTime15m()).isEqualTo(start.plusSeconds(13 * 60 + 30));
+        assertThat(current.change5mPercent()).isNull();
+        assertThat(current.change30mPercent()).isNull();
+
+        var fiveMinuteStore = new InMemoryOpenInterestStateStore();
+        fiveMinuteStore.update(state("ETHUSDT", "100", start));
+        assertThat(fiveMinuteStore.update(state("ETHUSDT", "110", start.plusSeconds(7 * 60 + 1)))
+                .change5mPercent()).isNull();
+
+        var thirtyMinuteStore = new InMemoryOpenInterestStateStore();
+        thirtyMinuteStore.update(state("SOLUSDT", "100", start));
+        assertThat(thirtyMinuteStore.update(state("SOLUSDT", "110", start.plusSeconds(32 * 60 + 1)))
+                .change30mPercent()).isNull();
+    }
+
     private OpenInterestState state(String symbol, String value, Instant time) {
         return new OpenInterestState("BINANCE", symbol, new BigDecimal(value), time, time);
     }
