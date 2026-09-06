@@ -11,10 +11,14 @@ class OpenInterestStateResponseTest {
     @Test
     void mapsWithoutLosingPrecision() {
         var value = new BigDecimal("12345.678901234567890123");
+        var change = new BigDecimal("1.234567890123456789");
         var response = OpenInterestStateResponse.from(new OpenInterestState(
-                "BINANCE", "BTCUSDT", value, Instant.EPOCH, Instant.EPOCH.plusSeconds(1)));
+                "BINANCE", "BTCUSDT", value, change, null, null, null, null,
+                Instant.EPOCH, Instant.EPOCH.plusSeconds(1)));
         assertThat(response.openInterest()).isSameAs(value);
         assertThat(response.source()).isEqualTo("BINANCE");
         assertThat(response.symbol()).isEqualTo("BTCUSDT");
+        assertThat(response.change5mPercent()).isSameAs(change);
+        assertThat(response.change15mPercent()).isNull();
     }
 }

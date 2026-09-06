@@ -42,3 +42,7 @@ finstream:
     funding-extreme:
       enabled: ${FUNDING_EXTREME_ENABLED:true}
       threshold: ${FUNDING_EXTREME_THRESHOLD:0.001}
+    # Percent change over the fixed 15-minute OI window; 5.0 means 5%.
+    open-interest-surge:
+      enabled: ${OPEN_INTEREST_SURGE_ENABLED:true}
+      threshold-percent: ${OPEN_INTEREST_SURGE_THRESHOLD_PERCENT:5.0}

@@ -9,7 +9,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public record FinStreamProperties(Market market, Anomaly anomaly) {
     public FinStreamProperties {
         market = market == null ? new Market(null, null) : market;
-        anomaly = anomaly == null ? new Anomaly(null, null, null, null, null) : anomaly;
+        anomaly = anomaly == null ? new Anomaly(null, null, null, null, null, null) : anomaly;
     }
 
     public record Market(List<String> symbols, Binance binance) {
@@ -63,9 +63,9 @@ public record FinStreamProperties(Market market, Anomaly anomaly) {
 
     public record Anomaly(
             Duration cooldown, Rule rapidDrop, Rule rapidPump, VolumeRule abnormalVolume,
-            FundingExtreme fundingExtreme) {
+            FundingExtreme fundingExtreme, OpenInterestSurge openInterestSurge) {
         public Anomaly(Duration cooldown, Rule rapidDrop, Rule rapidPump, VolumeRule abnormalVolume) {
-            this(cooldown, rapidDrop, rapidPump, abnormalVolume, null);
+            this(cooldown, rapidDrop, rapidPump, abnormalVolume, null, null);
         }
 
         public Anomaly {
@@ -76,6 +76,8 @@ public record FinStreamProperties(Market market, Anomaly anomaly) {
             fundingExtreme = fundingExtreme == null
                     ? new FundingExtreme(true, new BigDecimal("0.001"))
                     : fundingExtreme;
+            openInterestSurge = openInterestSurge == null
+                    ? new OpenInterestSurge(true, new BigDecimal("5.0")) : openInterestSurge;
         }
     }
 
@@ -89,6 +91,15 @@ public record FinStreamProperties(Market market, Anomaly anomaly) {
             threshold = threshold == null ? new BigDecimal("0.001") : threshold;
             if (threshold.signum() <= 0) {
                 throw new IllegalArgumentException("Funding extreme threshold must be positive");
+            }
+        }
+    }
+
+    public record OpenInterestSurge(boolean enabled, BigDecimal thresholdPercent) {
+        public OpenInterestSurge {
+            thresholdPercent = thresholdPercent == null ? new BigDecimal("5.0") : thresholdPercent;
+            if (thresholdPercent.signum() <= 0) {
+                throw new IllegalArgumentException("Open Interest surge threshold must be positive");
             }
         }
     }
