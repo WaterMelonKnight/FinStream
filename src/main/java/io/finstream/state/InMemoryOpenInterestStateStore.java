@@ -34,24 +34,40 @@ public class InMemoryOpenInterestStateStore implements OpenInterestStateStore {
                         state.symbol(), state.eventTime(), latest.eventTime());
                 return latest;
             }
-            // Equal timestamps deterministically replace the prior observation.
-            if (latest != null && state.eventTime().equals(latest.eventTime())) {
+            // A polling snapshot is a new observation even when Binance repeats its transaction
+            // timestamp. Only an exact duplicate observation replaces the prior sample.
+            if (latest != null && state.eventTime().equals(latest.eventTime())
+                    && state.receivedAt().equals(latest.receivedAt())) {
                 history.samples.removeLast();
             }
             history.samples.addLast(state);
-            Instant cutoff = state.eventTime().minus(HISTORY_RETENTION);
+            Instant observationTime = state.receivedAt();
+            Instant cutoff = observationTime.minus(HISTORY_RETENTION);
             while (!history.samples.isEmpty()
-                    && history.samples.peekFirst().eventTime().isBefore(cutoff)) {
+                    && history.samples.peekFirst().receivedAt().isBefore(cutoff)) {
                 history.samples.removeFirst();
             }
-            Reference five = reference(history.samples, state.eventTime(), FIVE_MINUTES);
-            Reference fifteen = reference(history.samples, state.eventTime(), FIFTEEN_MINUTES);
-            Reference thirty = reference(history.samples, state.eventTime(), THIRTY_MINUTES);
+            ReferenceSelection five = reference(history.samples, observationTime, FIVE_MINUTES);
+            ReferenceSelection fifteen = reference(history.samples, observationTime, FIFTEEN_MINUTES);
+            ReferenceSelection thirty = reference(history.samples, observationTime, THIRTY_MINUTES);
             history.latest = new OpenInterestState(state.source(), state.symbol(), state.openInterest(),
-                    change(state.openInterest(), five), change(state.openInterest(), fifteen),
-                    change(state.openInterest(), thirty),
-                    fifteen == null ? null : fifteen.openInterest(),
-                    fifteen == null ? null : fifteen.eventTime(), state.eventTime(), state.receivedAt());
+                    change(state.openInterest(), five.reference()),
+                    change(state.openInterest(), fifteen.reference()),
+                    change(state.openInterest(), thirty.reference()),
+                    fifteen.reference() == null ? null : fifteen.reference().openInterest(),
+                    fifteen.reference() == null ? null : fifteen.reference().eventTime(),
+                    state.eventTime(), state.receivedAt());
+            log.debug("Updated Open Interest rolling state: symbol={}, currentEventTime={}, "
+                            + "receivedAt={}, historySize={}, target5m={}, reference5mEventTime={}, "
+                            + "change5mPercent={}, reference5mStatus={}, target15m={}, "
+                            + "reference15mEventTime={}, change15mPercent={}, reference15mStatus={}, "
+                            + "target30m={}, reference30mEventTime={}, change30mPercent={}, "
+                            + "reference30mStatus={}",
+                    state.symbol(), state.eventTime(), state.receivedAt(), history.samples.size(),
+                    five.target(), candidateEventTime(five), history.latest.change5mPercent(), five.status(),
+                    fifteen.target(), candidateEventTime(fifteen), history.latest.change15mPercent(),
+                    fifteen.status(), thirty.target(), candidateEventTime(thirty),
+                    history.latest.change30mPercent(), thirty.status());
             return history.latest;
         }
     }
@@ -67,22 +83,31 @@ public class InMemoryOpenInterestStateStore implements OpenInterestStateStore {
 
     /**
      * Selects the newest observation at or before {@code currentTime - window}. This is based on
-     * event time rather than sample count and never interpolates. The candidate must be no more
+     * polling observation time ({@code receivedAt}) rather than sample count and never
+     * interpolates. The candidate must be no more
      * than two minutes older than the target, tolerating short polling gaps without reusing stale
      * history as a misleading window reference.
      */
-    private Reference reference(Deque<OpenInterestState> samples, Instant currentTime, Duration window) {
+    private ReferenceSelection reference(
+            Deque<OpenInterestState> samples, Instant currentTime, Duration window) {
         Instant target = currentTime.minus(window);
         OpenInterestState selected = null;
         for (OpenInterestState sample : samples) {
-            if (sample.eventTime().isAfter(target)) break;
+            if (sample.receivedAt().isAfter(target)) break;
             selected = sample;
         }
-        if (selected == null
-                || Duration.between(selected.eventTime(), target).compareTo(REFERENCE_MAX_LAG) > 0) {
-            return null;
+        if (selected == null) {
+            return new ReferenceSelection(target, null, ReferenceStatus.NO_REFERENCE);
         }
-        return new Reference(selected.openInterest(), selected.eventTime());
+        Reference reference = new Reference(
+                selected.openInterest(), selected.eventTime(), selected.receivedAt());
+        if (Duration.between(selected.receivedAt(), target).compareTo(REFERENCE_MAX_LAG) > 0) {
+            return new ReferenceSelection(target, reference, ReferenceStatus.REFERENCE_TOO_STALE);
+        }
+        if (selected.openInterest() == null || selected.openInterest().signum() <= 0) {
+            return new ReferenceSelection(target, reference, ReferenceStatus.REFERENCE_NON_POSITIVE);
+        }
+        return new ReferenceSelection(target, reference, ReferenceStatus.AVAILABLE);
     }
 
     private BigDecimal change(BigDecimal current, Reference reference) {
@@ -94,10 +119,28 @@ public class InMemoryOpenInterestStateStore implements OpenInterestStateStore {
                 .stripTrailingZeros();
     }
 
+    private Instant candidateEventTime(ReferenceSelection selection) {
+        return selection.candidate() == null ? null : selection.candidate().eventTime();
+    }
+
     private static final class SymbolHistory {
         private final Deque<OpenInterestState> samples = new ArrayDeque<>();
         private OpenInterestState latest;
     }
 
-    private record Reference(BigDecimal openInterest, Instant eventTime) {}
+    private record Reference(BigDecimal openInterest, Instant eventTime, Instant receivedAt) {}
+
+    private record ReferenceSelection(
+            Instant target, Reference candidate, ReferenceStatus status) {
+        private Reference reference() {
+            return status == ReferenceStatus.AVAILABLE ? candidate : null;
+        }
+    }
+
+    private enum ReferenceStatus {
+        AVAILABLE,
+        NO_REFERENCE,
+        REFERENCE_TOO_STALE,
+        REFERENCE_NON_POSITIVE
+    }
 }
