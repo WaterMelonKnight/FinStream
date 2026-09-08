@@ -33,6 +33,15 @@ class BinanceOpenInterestNormalizerTest {
     }
 
     @Test
+    void interpretsBinanceTimeAsEpochMilliseconds() throws Exception {
+        var event = normalizer.normalize("""
+                {"symbol":"BTCUSDT","openInterest":"1","time":1760000000000}
+                """);
+
+        assertThat(event.eventTime()).isEqualTo(Instant.ofEpochMilli(1760000000000L));
+    }
+
+    @Test
     void rejectsMalformedJsonAndMissingOrInvalidFields() {
         assertThatThrownBy(() -> normalizer.normalize("{"))
                 .isInstanceOf(JsonProcessingException.class);

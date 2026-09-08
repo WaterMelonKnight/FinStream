@@ -4,10 +4,71 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import io.finstream.domain.OpenInterestState;
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 import org.junit.jupiter.api.Test;
 
 class InMemoryOpenInterestStateStoreTest {
+    @Test
+    void derivesEveryWindowDuringThirtySecondPolling() {
+        var store = new InMemoryOpenInterestStateStore();
+        Instant start = Instant.parse("2026-01-01T00:00:00Z");
+        OpenInterestState current = null;
+        for (int seconds = 0; seconds <= 31 * 60; seconds += 30) {
+            current = store.update(state("BTCUSDT", Integer.toString(100 + seconds / 30),
+                    start.plusSeconds(seconds)));
+            if (seconds == 5 * 60) assertThat(current.change5mPercent()).isNotNull();
+            if (seconds == 15 * 60) assertThat(current.change15mPercent()).isNotNull();
+            if (seconds == 30 * 60) assertThat(current.change30mPercent()).isNotNull();
+        }
+        assertThat(current.change5mPercent()).isNotNull();
+        assertThat(current.change15mPercent()).isNotNull();
+        assertThat(current.change30mPercent()).isNotNull();
+    }
+
+    @Test
+    void toleratesPollingJitterAndTemporaryGap() {
+        var store = new InMemoryOpenInterestStateStore();
+        Instant start = Instant.parse("2026-01-01T00:00:00Z");
+        long[] intervals = {30, 35, 28, 45};
+        long elapsed = 0;
+        int index = 0;
+        while (elapsed < 17 * 60) {
+            store.update(state("BTCUSDT", Integer.toString(100 + index), start.plusSeconds(elapsed)));
+            elapsed += intervals[index++ % intervals.length];
+        }
+        // A gap within the two-minute reference tolerance remains usable.
+        var current = store.update(state("BTCUSDT", "200", start.plusSeconds(18 * 60)));
+
+        assertThat(current.change5mPercent()).isNotNull();
+        assertThat(current.change15mPercent()).isNotNull();
+    }
+
+    @Test
+    void doesNotUseReferenceBeyondFreshnessToleranceAfterLongGap() {
+        var store = new InMemoryOpenInterestStateStore();
+        Instant start = Instant.parse("2026-01-01T00:00:00Z");
+        store.update(state("BTCUSDT", "100", start));
+
+        var current = store.update(state("BTCUSDT", "110",
+                start.plus(Duration.ofMinutes(7)).plusSeconds(1)));
+
+        assertThat(current.change5mPercent()).isNull();
+    }
+
+    @Test
+    void equalExchangeTimestampsStillAccumulateDistinctPollingObservations() {
+        var store = new InMemoryOpenInterestStateStore();
+        Instant exchangeTime = Instant.parse("2026-01-01T00:00:00Z");
+        Instant received = Instant.parse("2026-01-01T01:00:00Z");
+        for (int seconds = 0; seconds <= 5 * 60; seconds += 30) {
+            store.update(state("BTCUSDT", Integer.toString(100 + seconds / 30),
+                    exchangeTime, received.plusSeconds(seconds)));
+        }
+
+        assertThat(store.get("BTCUSDT").orElseThrow().change5mPercent())
+                .isEqualByComparingTo("10");
+    }
     @Test
     void keepsLatestSnapshotForEachSymbolAndMissingIsEmpty() {
         var store = new InMemoryOpenInterestStateStore();
@@ -102,5 +163,11 @@ class InMemoryOpenInterestStateStoreTest {
 
     private OpenInterestState state(String symbol, String value, Instant time) {
         return new OpenInterestState("BINANCE", symbol, new BigDecimal(value), time, time);
+    }
+
+    private OpenInterestState state(
+            String symbol, String value, Instant eventTime, Instant receivedAt) {
+        return new OpenInterestState(
+                "BINANCE", symbol, new BigDecimal(value), eventTime, receivedAt);
     }
 }
