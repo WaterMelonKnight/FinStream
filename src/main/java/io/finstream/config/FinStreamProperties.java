@@ -17,21 +17,13 @@ public record FinStreamProperties(Market market, Anomaly anomaly) {
             symbols = symbols == null
                     ? List.of("BTCUSDT", "ETHUSDT", "SOLUSDT")
                     : List.copyOf(symbols);
-            binance = binance == null ? new Binance(false, null) : binance;
+            binance = binance == null ? new Binance(false, null, null, null) : binance;
         }
     }
 
     public record Binance(
             boolean enabled, String baseUrl, FundingRate fundingRate,
             OpenInterest openInterest) {
-        public Binance(boolean enabled, String baseUrl) {
-            this(enabled, baseUrl, null, null);
-        }
-
-        public Binance(boolean enabled, String baseUrl, FundingRate fundingRate) {
-            this(enabled, baseUrl, fundingRate, null);
-        }
-
         public Binance {
             baseUrl = baseUrl == null
                     ? "wss://stream.binance.com:9443/stream?streams="
@@ -64,10 +56,6 @@ public record FinStreamProperties(Market market, Anomaly anomaly) {
     public record Anomaly(
             Duration cooldown, Rule rapidDrop, Rule rapidPump, VolumeRule abnormalVolume,
             FundingExtreme fundingExtreme, OpenInterestSurge openInterestSurge) {
-        public Anomaly(Duration cooldown, Rule rapidDrop, Rule rapidPump, VolumeRule abnormalVolume) {
-            this(cooldown, rapidDrop, rapidPump, abnormalVolume, null, null);
-        }
-
         public Anomaly {
             cooldown = cooldown == null ? Duration.ofMinutes(10) : cooldown;
             rapidDrop = rapidDrop == null ? new Rule(true, 3) : rapidDrop;

@@ -16,12 +16,14 @@ import org.junit.jupiter.api.Test;
 class AnomalyRulesTest {
     private final FinStreamProperties properties = new FinStreamProperties(
             new FinStreamProperties.Market(
-                    List.of("BTCUSDT"), new FinStreamProperties.Binance(false, null)),
+                    List.of("BTCUSDT"), new FinStreamProperties.Binance(false, null, null, null)),
             new FinStreamProperties.Anomaly(
                     Duration.ofMinutes(5),
                     new FinStreamProperties.Rule(true, 3),
                     new FinStreamProperties.Rule(true, 3),
-                    new FinStreamProperties.VolumeRule(true, 3)));
+                    new FinStreamProperties.VolumeRule(true, 3),
+                    null,
+                    null));
 
     private final MarketEvent event = new MarketEvent(
             "TEST",

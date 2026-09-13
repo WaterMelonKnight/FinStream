@@ -128,7 +128,7 @@ class MarketEventPipelineTest {
         return new FinStreamProperties(
                 null,
                 new FinStreamProperties.Anomaly(
-                        Duration.ofMinutes(5), null, null, null));
+                        Duration.ofMinutes(5), null, null, null, null, null));
     }
 
     private MarketEvent marketEvent() {
