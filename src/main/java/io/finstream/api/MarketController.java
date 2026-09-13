@@ -1,6 +1,7 @@
 package io.finstream.api;
 
 import io.finstream.query.FundingRateStateResponse;
+import io.finstream.query.MarketContextResponse;
 import io.finstream.query.MarketQueryService;
 import io.finstream.query.MarketStateResponse;
 import io.finstream.query.OpenInterestStateResponse;
@@ -33,6 +34,12 @@ public class MarketController {
     @GetMapping("/{symbol}/open-interest")
     public Mono<OpenInterestStateResponse> openInterest(@PathVariable String symbol) {
         return Mono.fromCallable(() -> service.getOpenInterestState(symbol))
+                .subscribeOn(Schedulers.boundedElastic());
+    }
+
+    @GetMapping("/{symbol}/context")
+    public Mono<MarketContextResponse> context(@PathVariable String symbol) {
+        return Mono.fromCallable(() -> service.getMarketContext(symbol))
                 .subscribeOn(Schedulers.boundedElastic());
     }
 }

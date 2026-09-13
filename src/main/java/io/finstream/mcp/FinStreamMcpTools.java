@@ -22,6 +22,12 @@ public class FinStreamMcpTools {
         this.events = events;
     }
 
+    @Tool(name = "get_market_context", description = "Get one read-only market context for a symbol: price/volume-derived market state, funding, open interest, freshness ages, and Spot versus USD-M Futures provenance. This is related context, not cross-signal trading inference.")
+    public McpToolResult getMarketContext(
+            @ToolParam(description = "Market symbol, for example BTCUSDT") String symbol) {
+        return execute(() -> markets.getMarketContext(symbol));
+    }
+
     @Tool(name = "get_market_state", description = "Get the latest in-memory market state snapshot for a symbol. Read-only.")
     public McpToolResult getMarketState(@ToolParam(description = "Market symbol, for example BTCUSDT") String symbol) {
         return execute(() -> markets.getMarketState(symbol));

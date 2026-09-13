@@ -95,7 +95,8 @@ public class InMemoryRollingMarketStateStore implements MarketStateStore {
                 high,
                 low,
                 volumeRatio,
-                baselineReady);
+                baselineReady,
+                current.receivedAt());
     }
 
     private TradePayload tradePayload(MarketEvent event) {

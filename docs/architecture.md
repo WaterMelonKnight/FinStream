@@ -87,12 +87,14 @@ continue. All three connectors are disabled independently by default. The Open I
 
 Open Interest state uses a synchronized deque per symbol and retains 35 minutes, enough for the
 30-minute window plus polling jitter. For each 5-, 15-, or 30-minute window, the reference is the
-newest sample whose event time is at or before `currentEventTime - window`. Selection is therefore
-deterministic, event-time based, independent of sample count, tolerant of polling gaps, and uses no
-interpolation. That candidate must be no more than two minutes older than the target: short polling
-gaps are tolerated, but stale historical samples are not reused as misleading window references.
-Until such a fresh sample exists—or when its OI is non-positive—the corresponding change is
-unavailable (`null`). Older events are ignored; equal event times replace the previous sample.
+newest observation whose `receivedAt` is at or before `currentReceivedAt - window`. Selection is therefore
+deterministic, based on the polling observation timeline, independent of sample count, tolerant of
+polling gaps, and uses no interpolation. That candidate must be no more than two minutes older than
+the target: short polling gaps are tolerated, but stale historical samples are not reused as
+misleading window references. Until such a fresh sample exists—or when its OI is non-positive—the
+corresponding change is unavailable (`null`). Older events are ignored. Equal exchange `eventTime`
+values with different `receivedAt` values are distinct polling observations; only an exact duplicate
+is removed.
 The 15-minute positive change drives `OPEN_INTEREST_SURGE`; score is change divided by its positive
 configured threshold, with MEDIUM below 2 and HIGH from 2. The rule does not infer position direction.
 
@@ -111,7 +113,7 @@ Market Feed
   -> REST adapter + MCP adapter
 ```
 
-`MarketQueryService` and `FinancialEventQueryService` own normalization, validation, limit handling, repository specifications, not-found semantics, and mapping to stable response records. `MarketQueryService` maps all three transient current-state types to independent public contracts: trade-derived `MarketStateResponse`, `FundingRateStateResponse`, and `OpenInterestStateResponse`. The funding response preserves Binance's decimal funding rate and also supplies a percent representation by moving the decimal point two places; the Open Interest response preserves the raw Binance decimal value without inferring a unit or notional. REST controllers and MCP tools are thin adapters over those same services; neither adapter calls the other and neither exposes internal domain records or the JPA entity. Dynamic JPA Specifications cover optional filters without a repository method for every combination. Results sort by `detectedAt`, then `eventTime`, descending.
+`MarketQueryService` and `FinancialEventQueryService` own normalization, validation, limit handling, repository specifications, not-found semantics, and mapping to stable response records. `MarketQueryService` maps all three transient current-state types to independent public contracts: trade-derived `MarketStateResponse`, `FundingRateStateResponse`, and `OpenInterestStateResponse`. It also composes a query-time `MarketContextResponse` without creating a fourth state store: each section independently reports availability, `observedAt` (the local `receivedAt`), non-negative `ageSeconds` computed from an injected `Clock`, and its mapped state data when present. The context identifies trade-derived state as Binance Spot and funding/Open Interest as Binance USDⓈ-M Futures; it is related context, not a strictly synchronized same-product snapshot. The funding response preserves Binance's decimal funding rate and also supplies a percent representation by moving the decimal point two places; the Open Interest response preserves the raw Binance decimal value without inferring a unit or notional. REST controllers and MCP tools are thin adapters over those same services; neither adapter calls the other and neither exposes internal domain records or the JPA entity. Dynamic JPA Specifications cover optional filters without a repository method for every combination. Results sort by `detectedAt`, then `eventTime`, descending.
 
 WebFlux REST calls wrap service work on Reactor's bounded-elastic scheduler. MCP tool execution also moves its callable to bounded elastic before waiting for the structured tool result. Blocking JPA queries therefore do not execute on a Reactor Netty event-loop thread, while JPA remains the persistence technology.
 

@@ -5,6 +5,7 @@ import static org.mockito.Mockito.when;
 import io.finstream.query.FinancialEventQueryService;
 import io.finstream.query.FinancialEventResponse;
 import io.finstream.query.FundingRateStateResponse;
+import io.finstream.query.MarketContextResponse;
 import io.finstream.query.MarketQueryService;
 import io.finstream.query.MarketStateResponse;
 import io.finstream.query.OpenInterestStateResponse;
@@ -82,6 +83,40 @@ class QueryControllersTest {
         client.get().uri("/api/v1/market/MISSING/open-interest").exchange()
                 .expectStatus().isNotFound().expectBody()
                 .jsonPath("$.code").isEqualTo("OPEN_INTEREST_STATE_NOT_FOUND");
+    }
+
+    @Test
+    void marketContextHasStablePartialContract() {
+        Instant generatedAt = Instant.parse("2026-09-13T12:00:00Z");
+        var context = new MarketContextResponse("BTCUSDT", generatedAt,
+                new MarketContextResponse.MarketContextSection<>(true, "SPOT", 2L,
+                        generatedAt.minusSeconds(2), state()),
+                new MarketContextResponse.MarketContextSection<>(false, "USD_M_FUTURES", null,
+                        null, null),
+                new MarketContextResponse.MarketContextSection<>(true, "USD_M_FUTURES", 15L,
+                        generatedAt.minusSeconds(15), new OpenInterestStateResponse(
+                                "BINANCE", "BTCUSDT", new BigDecimal("123"),
+                                Instant.EPOCH, generatedAt.minusSeconds(15))));
+        when(markets.getMarketContext("btcusdt")).thenReturn(context);
+
+        client.get().uri("/api/v1/market/btcusdt/context").exchange().expectStatus().isOk()
+                .expectBody().jsonPath("$.symbol").isEqualTo("BTCUSDT")
+                .jsonPath("$.market.available").isEqualTo(true)
+                .jsonPath("$.market.marketType").isEqualTo("SPOT")
+                .jsonPath("$.market.ageSeconds").isEqualTo(2)
+                .jsonPath("$.funding.available").isEqualTo(false)
+                .jsonPath("$.funding.data").doesNotExist()
+                .jsonPath("$.openInterest.marketType").isEqualTo("USD_M_FUTURES");
+    }
+
+    @Test
+    void marketContextAllMissingUsesContextError() {
+        when(markets.getMarketContext("MISSING")).thenThrow(new QueryException(
+                "MARKET_CONTEXT_NOT_FOUND", "missing context", true));
+
+        client.get().uri("/api/v1/market/MISSING/context").exchange().expectStatus().isNotFound()
+                .expectBody().jsonPath("$.code").isEqualTo("MARKET_CONTEXT_NOT_FOUND")
+                .jsonPath("$.message").isEqualTo("missing context").jsonPath("$.timestamp").exists();
     }
 
     @Test
