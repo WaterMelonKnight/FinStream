@@ -7,7 +7,7 @@
 - Streams Binance public aggregate trades, maintains bounded 30-minute in-memory state, and detects rapid price moves and abnormal volume.
 - Optionally polls Binance's public USDⓈ-M premium-index endpoint for funding rates and the current Open Interest endpoint. Funding rates can produce `FUNDING_EXTREME`; bounded Open Interest history derives 5-, 15-, and 30-minute changes and can produce `OPEN_INTEREST_SURGE`.
 - Persists only anomaly events to PostgreSQL JSONB while keeping the V0.1 real-time pipeline unchanged.
-- Exposes stable, read-only REST response contracts and six MCP tools through one application query layer.
+- Exposes stable, read-only REST response contracts and seven MCP tools through one application query layer.
 - Moves blocking JPA persistence and queries away from Reactor Netty event-loop threads.
 
 **FinStream MCP provides read-only market context and anomaly event access.** It has no order, account, wallet, or other trading tools.
@@ -185,6 +185,7 @@ USDⓈ-M Futures provenance. It exposes related context only; it does not provid
 trading inference.
 
 A representative client configuration (the outer field names can vary by client) is:
+```json
 {
   "mcpServers": {
     "finstream": {

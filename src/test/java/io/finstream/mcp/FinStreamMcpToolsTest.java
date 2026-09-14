@@ -24,7 +24,7 @@ class FinStreamMcpToolsTest {
     @Mock FinancialEventQueryService events;
 
     @Test
-    void allSixToolsDelegateAndReturnStructuredResults() {
+    void allSevenToolsDelegateAndReturnStructuredResults() {
         UUID id = UUID.randomUUID();
         when(markets.getMarketState("BTCUSDT")).thenReturn(null);
         FundingRateStateResponse funding = new FundingRateStateResponse(
