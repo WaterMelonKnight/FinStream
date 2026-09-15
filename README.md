@@ -7,7 +7,7 @@
 - Streams Binance public aggregate trades, maintains bounded 30-minute in-memory state, and detects rapid price moves and abnormal volume.
 - Optionally polls Binance's public USDⓈ-M premium-index endpoint for funding rates and the current Open Interest endpoint. Funding rates can produce `FUNDING_EXTREME`; bounded Open Interest history derives 5-, 15-, and 30-minute changes and can produce `OPEN_INTEREST_SURGE`.
 - Persists only anomaly events to PostgreSQL JSONB while keeping the V0.1 real-time pipeline unchanged.
-- Exposes stable, read-only REST response contracts and six MCP tools through one application query layer.
+- Exposes stable, read-only REST response contracts and seven MCP tools through one application query layer.
 - Moves blocking JPA persistence and queries away from Reactor Netty event-loop threads.
 
 **FinStream MCP provides read-only market context and anomaly event access.** It has no order, account, wallet, or other trading tools.
@@ -131,6 +131,7 @@ List limits default to 50, reject values below 1, and are capped at 200. Symbols
 curl http://localhost:8080/api/v1/market/BTCUSDT/state
 curl http://localhost:8080/api/v1/market/BTCUSDT/funding-rate
 curl http://localhost:8080/api/v1/market/BTCUSDT/open-interest
+curl http://localhost:8080/api/v1/market/BTCUSDT/context
 curl "http://localhost:8080/api/v1/events?symbol=BTCUSDT&limit=10"
 curl "http://localhost:8080/api/v1/events?eventType=RAPID_DROP&limit=20"
 curl "http://localhost:8080/api/v1/events?eventType=FUNDING_EXTREME&limit=20"
@@ -144,11 +145,20 @@ The endpoints are:
 - `GET /api/v1/market/{symbol}/state`
 - `GET /api/v1/market/{symbol}/funding-rate`
 - `GET /api/v1/market/{symbol}/open-interest`
+- `GET /api/v1/market/{symbol}/context`
 - `GET /api/v1/events`
 - `GET /api/v1/events/{eventId}`
 - `GET /api/v1/events/abnormal`
 
 Invalid input and missing resources use stable JSON errors with `code`, `message`, and `timestamp`.
+The context endpoint is the recommended one-shot query for agents: it returns the price/volume-derived
+market state, funding rate, Open Interest, objective `ageSeconds` freshness metadata, and explicit
+product provenance. Trade-derived market state represents Binance Spot, while funding and Open
+Interest represent Binance USDⓈ-M Futures; this is related context rather than a strictly
+synchronized same-product snapshot, and it does not infer cross-signal trading conclusions.
+Each component is independently available, so a partial context returns 200. If all three current
+states are missing, the endpoint returns `MARKET_CONTEXT_NOT_FOUND` with the standard error shape.
+
 The funding-rate response reports Binance's decimal `fundingRate` (for example, `0.001`) and
 the human-readable `fundingRatePercent` (for example, `0.1`, meaning `0.1%`) alongside mark and
 index prices and funding, exchange-event, and receive timestamps. It is a current-state view,
@@ -162,14 +172,19 @@ FinStream embeds the official Spring AI `spring-ai-starter-mcp-server-webflux` 1
 Available tools:
 
 - `get_market_state(symbol)`
+- `get_market_context(symbol)`
 - `get_funding_rate_state(symbol)`
 - `get_open_interest_state(symbol)`
 - `get_recent_events(symbol?, eventType?, limit?)`
 - `get_event_detail(eventId)`
 - `get_abnormal_events(since?, minScore?, symbol?, limit?)`
 
-A representative client configuration (the outer field names can vary by client) is:
+`get_market_context(symbol)` is the recommended one-shot read-only entry point for agents needing
+price/volume-derived market state plus funding, Open Interest, freshness ages, and Spot versus
+USDⓈ-M Futures provenance. It exposes related context only; it does not provide cross-signal
+trading inference.
 
+A representative client configuration (the outer field names can vary by client) is:
 ```json
 {
   "mcpServers": {

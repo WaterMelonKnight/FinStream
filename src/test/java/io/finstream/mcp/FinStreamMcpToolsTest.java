@@ -5,6 +5,7 @@ import static org.mockito.Mockito.when;
 
 import io.finstream.query.FinancialEventQueryService;
 import io.finstream.query.FundingRateStateResponse;
+import io.finstream.query.MarketContextResponse;
 import io.finstream.query.MarketQueryService;
 import io.finstream.query.OpenInterestStateResponse;
 import io.finstream.query.QueryException;
@@ -23,7 +24,7 @@ class FinStreamMcpToolsTest {
     @Mock FinancialEventQueryService events;
 
     @Test
-    void allSixToolsDelegateAndReturnStructuredResults() {
+    void allSevenToolsDelegateAndReturnStructuredResults() {
         UUID id = UUID.randomUUID();
         when(markets.getMarketState("BTCUSDT")).thenReturn(null);
         FundingRateStateResponse funding = new FundingRateStateResponse(
@@ -45,6 +46,25 @@ class FinStreamMcpToolsTest {
         assertThat(tools.getRecentEvents("BTCUSDT", null, 10).success()).isTrue();
         assertThat(tools.getEventDetail(id.toString()).success()).isTrue();
         assertThat(tools.getAbnormalEvents(Instant.EPOCH.toString(), 1.5, "BTCUSDT", 20).success()).isTrue();
+    }
+
+    @Test
+    void marketContextToolDelegatesToSharedQueryService() {
+        var context = new MarketContextResponse("BTCUSDT", Instant.EPOCH, null, null, null);
+        when(markets.getMarketContext("BTCUSDT")).thenReturn(context);
+        FinStreamMcpTools tools = new FinStreamMcpTools(markets, events);
+
+        assertThat(tools.getMarketContext("BTCUSDT").data()).isEqualTo(context);
+    }
+
+    @Test
+    void marketContextToolReturnsSharedNotFoundError() {
+        when(markets.getMarketContext("NONE")).thenThrow(
+                new QueryException("MARKET_CONTEXT_NOT_FOUND", "missing context", true));
+        FinStreamMcpTools tools = new FinStreamMcpTools(markets, events);
+
+        assertThat(tools.getMarketContext("NONE").error().code())
+                .isEqualTo("MARKET_CONTEXT_NOT_FOUND");
     }
 
     @Test

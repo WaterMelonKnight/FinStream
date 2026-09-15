@@ -1,14 +1,21 @@
 package io.finstream;
 
 import io.finstream.config.FinStreamProperties;
+import java.time.Clock;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.context.annotation.Bean;
 
 @SpringBootApplication
 @EnableConfigurationProperties(FinStreamProperties.class)
 public class FinStreamApplication {
     public static void main(String[] args) {
         SpringApplication.run(FinStreamApplication.class, args);
+    }
+
+    @Bean
+    Clock clock() {
+        return Clock.systemUTC();
     }
 }
